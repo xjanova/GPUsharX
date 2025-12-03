@@ -51,6 +51,52 @@
         </div>
     </div>
 
+    <!-- KYC Status Alert -->
+    @if(!$user->isKycApproved())
+    <div class="bg-orange-600/20 border border-orange-500 rounded-lg p-4 mb-6">
+        <div class="flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <i class="fas fa-user-shield text-orange-400 text-xl"></i>
+                <div>
+                    <p class="font-semibold text-orange-400">
+                        @if($user->kyc_status === 'pending')
+                            กำลังตรวจสอบเอกสาร KYC
+                        @elseif($user->kyc_status === 'rejected')
+                            KYC ไม่ผ่านการอนุมัติ
+                        @else
+                            ต้องยืนยันตัวตนก่อนถอนเงิน
+                        @endif
+                    </p>
+                    <p class="text-gray-300 text-sm">
+                        @if($user->kyc_status === 'pending')
+                            กรุณารอ 1-3 วันทำการเพื่อตรวจสอบเอกสาร
+                        @elseif($user->kyc_status === 'rejected')
+                            กรุณาส่งเอกสารใหม่เพื่อยืนยันตัวตน
+                        @else
+                            คุณต้องผ่านการยืนยันตัวตน (KYC) ก่อนจึงจะสามารถถอนเงินได้
+                        @endif
+                    </p>
+                </div>
+            </div>
+            <a href="{{ route('kyc.index') }}" class="px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg flex items-center gap-2 transition">
+                <i class="fas fa-id-card"></i>
+                <span>{{ $user->kyc_status === 'rejected' ? 'ส่งใหม่' : ($user->kyc_status === 'pending' ? 'ดูสถานะ' : 'ยืนยันตัวตน') }}</span>
+            </a>
+        </div>
+    </div>
+    @else
+    <!-- KYC Verified Badge -->
+    <div class="bg-green-600/20 border border-green-500 rounded-lg p-3 mb-6">
+        <div class="flex items-center gap-3">
+            <i class="fas fa-check-circle text-green-400 text-lg"></i>
+            <span class="text-green-400 text-sm">ผ่านการยืนยันตัวตนแล้ว - สามารถถอนเงินได้</span>
+            @if($kyc)
+            <span class="text-gray-400 text-sm ml-auto">บัญชี: {{ $kyc->bank_display_name }} {{ $kyc->masked_account_number }}</span>
+            @endif
+        </div>
+    </div>
+    @endif
+
     <!-- Action Buttons -->
     <div class="flex flex-wrap gap-4 mb-8">
         <!-- Transfer Earnings Button -->
@@ -63,10 +109,17 @@
 
         <!-- Withdraw Button -->
         @if($stats['balance'] >= $settings['min_withdrawal'])
-        <button onclick="openWithdrawModal()" class="px-6 py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-lg flex items-center gap-2 transition">
-            <i class="fas fa-money-bill-wave"></i>
-            <span>Withdraw</span>
-        </button>
+            @if($user->isKycApproved())
+            <button onclick="openWithdrawModal()" class="px-6 py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-lg flex items-center gap-2 transition">
+                <i class="fas fa-money-bill-wave"></i>
+                <span>Withdraw</span>
+            </button>
+            @else
+            <a href="{{ route('kyc.index') }}" class="px-6 py-3 bg-orange-600 hover:bg-orange-700 text-white rounded-lg flex items-center gap-2 transition">
+                <i class="fas fa-user-shield"></i>
+                <span>ยืนยันตัวตนก่อนถอนเงิน</span>
+            </a>
+            @endif
         @else
         <button disabled class="px-6 py-3 bg-gray-700 text-gray-400 rounded-lg flex items-center gap-2 cursor-not-allowed">
             <i class="fas fa-money-bill-wave"></i>

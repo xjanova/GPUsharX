@@ -4,7 +4,35 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    <title>@yield('title', 'GPU Share') - Xman Studio Thailand</title>
+    @php
+        $siteName = \App\Models\SiteSetting::get('site_name', config('app.name', 'GPU Share X'));
+        $siteDescription = \App\Models\SiteSetting::get('site_description', 'แพลตฟอร์ม AI Generation แบบกระจาย');
+        $siteFavicon = \App\Models\SiteSetting::get('site_favicon');
+        $ogImage = \App\Models\SiteSetting::get('og_image');
+        $metaKeywords = \App\Models\SiteSetting::get('meta_keywords');
+    @endphp
+    <title>@yield('title', $siteName) - {{ $siteName }}</title>
+    <meta name="description" content="{{ $siteDescription }}">
+    @if($metaKeywords)
+    <meta name="keywords" content="{{ $metaKeywords }}">
+    @endif
+
+    <!-- Favicon -->
+    @if($siteFavicon)
+    <link rel="icon" href="{{ asset('storage/' . $siteFavicon) }}" type="image/png">
+    <link rel="shortcut icon" href="{{ asset('storage/' . $siteFavicon) }}">
+    @else
+    <link rel="icon" href="{{ asset('favicon.ico') }}" type="image/x-icon">
+    @endif
+
+    <!-- Open Graph -->
+    <meta property="og:title" content="@yield('title', $siteName)">
+    <meta property="og:description" content="{{ $siteDescription }}">
+    <meta property="og:type" content="website">
+    @if($ogImage)
+    <meta property="og:image" content="{{ asset('storage/' . $ogImage) }}">
+    @endif
+
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -138,10 +166,15 @@
     <nav class="fixed top-0 left-0 right-0 z-50 glass border-b border-gray-800/50">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div class="flex justify-between h-16 items-center">
+                @php $siteLogo = \App\Models\SiteSetting::get('site_logo'); @endphp
                 <div class="flex items-center space-x-8">
                     <a href="/" class="flex items-center">
+                        @if($siteLogo)
+                        <img src="{{ asset('storage/' . $siteLogo) }}" alt="{{ $siteName }}" class="h-8 w-auto mr-3">
+                        @else
                         <i class="fas fa-microchip text-purple-500 text-2xl mr-3"></i>
-                        <span class="text-xl font-bold gradient-text">GPU Share</span>
+                        @endif
+                        <span class="text-xl font-bold gradient-text">{{ $siteName }}</span>
                     </a>
                     <div class="hidden md:flex space-x-6">
                         <a href="{{ route('generate') }}" class="text-gray-300 hover:text-white transition flex items-center">
@@ -200,11 +233,15 @@
             <div class="grid grid-cols-1 md:grid-cols-4 gap-8">
                 <div>
                     <div class="flex items-center mb-4">
+                        @if($siteLogo)
+                        <img src="{{ asset('storage/' . $siteLogo) }}" alt="{{ $siteName }}" class="h-8 w-auto mr-3">
+                        @else
                         <i class="fas fa-microchip text-purple-500 text-2xl mr-3"></i>
-                        <span class="text-xl font-bold">GPU Share</span>
+                        @endif
+                        <span class="text-xl font-bold">{{ $siteName }}</span>
                     </div>
                     <p class="text-gray-400 text-sm">
-                        Share your GPU power, generate AI content, and earn rewards.
+                        {{ \App\Models\SiteSetting::get('site_tagline', 'Share your GPU power, generate AI content, and earn rewards.') }}
                     </p>
                 </div>
                 <div>
@@ -231,20 +268,38 @@
                     </ul>
                 </div>
             </div>
+            @php
+                $footerText = \App\Models\SiteSetting::get('footer_text', '© ' . date('Y') . ' ' . $siteName . '. All rights reserved.');
+                $facebookUrl = \App\Models\SiteSetting::get('facebook_url');
+                $twitterUrl = \App\Models\SiteSetting::get('twitter_url');
+                $discordUrl = \App\Models\SiteSetting::get('discord_url');
+                $githubUrl = \App\Models\SiteSetting::get('github_url');
+            @endphp
             <div class="mt-12 pt-8 border-t border-gray-800/50 flex flex-col md:flex-row justify-between items-center">
                 <p class="text-gray-500 text-sm">
-                    © {{ date('Y') }} <span class="text-purple-400">Xman Studio Thailand</span>. All rights reserved.
+                    {{ $footerText }}
                 </p>
                 <div class="flex space-x-4 mt-4 md:mt-0">
-                    <a href="#" class="text-gray-500 hover:text-purple-400 transition">
+                    @if($facebookUrl)
+                    <a href="{{ $facebookUrl }}" target="_blank" rel="noopener" class="text-gray-500 hover:text-purple-400 transition">
                         <i class="fab fa-facebook text-xl"></i>
                     </a>
-                    <a href="#" class="text-gray-500 hover:text-purple-400 transition">
+                    @endif
+                    @if($twitterUrl)
+                    <a href="{{ $twitterUrl }}" target="_blank" rel="noopener" class="text-gray-500 hover:text-purple-400 transition">
                         <i class="fab fa-twitter text-xl"></i>
                     </a>
-                    <a href="#" class="text-gray-500 hover:text-purple-400 transition">
+                    @endif
+                    @if($discordUrl)
+                    <a href="{{ $discordUrl }}" target="_blank" rel="noopener" class="text-gray-500 hover:text-purple-400 transition">
                         <i class="fab fa-discord text-xl"></i>
                     </a>
+                    @endif
+                    @if($githubUrl)
+                    <a href="{{ $githubUrl }}" target="_blank" rel="noopener" class="text-gray-500 hover:text-purple-400 transition">
+                        <i class="fab fa-github text-xl"></i>
+                    </a>
+                    @endif
                 </div>
             </div>
         </div>

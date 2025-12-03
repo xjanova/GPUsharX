@@ -3,12 +3,16 @@
 namespace App\Http\Controllers;
 
 use App\Models\User;
+use App\Services\ReferralService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 
 class AuthController extends Controller
 {
+    public function __construct(
+        protected ReferralService $referralService
+    ) {}
     public function showLogin()
     {
         if (Auth::check()) {
@@ -65,9 +69,14 @@ class AuthController extends Controller
         $user = User::create([
             'name' => $validated['name'],
             'email' => $validated['email'],
-            'password' => Hash::make($validated['password']),
+            'password' => $validated['password'], // User model casts will auto-hash
             'referred_by' => $referrer?->id,
         ]);
+
+        // Build referral tree if user was referred
+        if ($referrer) {
+            $this->referralService->buildReferralTree($user, $referrer);
+        }
 
         Auth::login($user);
 

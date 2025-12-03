@@ -49,7 +49,10 @@ class WalletController extends Controller
             'withdrawal_fee_fixed' => PlatformSetting::get('withdrawal_fee_fixed', 0),
         ];
 
-        return view('wallet.index', compact('user', 'transactions', 'withdrawals', 'stats', 'settings'));
+        // Get KYC info for withdrawal
+        $kyc = $user->kycVerification;
+
+        return view('wallet.index', compact('user', 'transactions', 'withdrawals', 'stats', 'settings', 'kyc'));
     }
 
     public function transferEarnings(Request $request)
@@ -83,6 +86,28 @@ class WalletController extends Controller
 
     public function withdraw(Request $request)
     {
+        $user = Auth::user();
+
+        // Check KYC verification
+        if (!$user->isKycApproved()) {
+            $message = match($user->kyc_status) {
+                'pending' => 'กรุณารอการตรวจสอบ KYC ของคุณให้เสร็จสิ้นก่อนถอนเงิน',
+                'rejected' => 'KYC ของคุณไม่ผ่านการอนุมัติ กรุณาส่งเอกสารใหม่',
+                default => 'กรุณายืนยันตัวตน (KYC) ก่อนถอนเงิน',
+            };
+
+            if ($request->wantsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => $message,
+                    'kyc_required' => true,
+                    'kyc_status' => $user->kyc_status,
+                ], 403);
+            }
+
+            return redirect()->route('kyc.index')->with('warning', $message);
+        }
+
         $validated = $request->validate([
             'amount' => 'required|numeric|min:1',
             'payment_method' => 'required|in:bank_transfer,promptpay,truemoney,paypal,crypto',
@@ -95,8 +120,6 @@ class WalletController extends Controller
             'crypto_address' => 'required_if:payment_method,crypto',
             'crypto_network' => 'required_if:payment_method,crypto',
         ]);
-
-        $user = Auth::user();
 
         // Build payment details based on method
         $paymentDetails = match($validated['payment_method']) {

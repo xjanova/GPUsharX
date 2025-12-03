@@ -71,6 +71,7 @@
                     <th class="text-left px-6 py-4 text-sm text-gray-400">Benchmark</th>
                     <th class="text-left px-6 py-4 text-sm text-gray-400">Status</th>
                     <th class="text-left px-6 py-4 text-sm text-gray-400">Last Seen</th>
+                    <th class="text-left px-6 py-4 text-sm text-gray-400">Actions</th>
                 </tr>
             </thead>
             <tbody class="divide-y divide-gray-700">
@@ -99,10 +100,42 @@
                     <td class="px-6 py-4 text-sm text-gray-400">
                         {{ $node->last_heartbeat ? $node->last_heartbeat->diffForHumans() : 'Never' }}
                     </td>
+                    <td class="px-6 py-4">
+                        <div class="flex gap-2">
+                            <a href="{{ route('admin.nodes.detail', $node) }}" class="text-purple-400 hover:text-purple-300" title="ดูรายละเอียด">
+                                <i class="fas fa-eye"></i>
+                            </a>
+                            <button onclick="openStatusModal({{ $node->id }}, '{{ $node->node_id }}', '{{ $node->status }}')" class="text-blue-400 hover:text-blue-300" title="เปลี่ยนสถานะ">
+                                <i class="fas fa-exchange-alt"></i>
+                            </button>
+                            @if($node->status !== 'banned')
+                            <form action="{{ route('admin.nodes.ban', $node) }}" method="POST" class="inline" onsubmit="return confirm('ยืนยันแบน Node {{ $node->node_id }}?')">
+                                @csrf
+                                <button type="submit" class="text-red-400 hover:text-red-300" title="แบน">
+                                    <i class="fas fa-ban"></i>
+                                </button>
+                            </form>
+                            @else
+                            <form action="{{ route('admin.nodes.unban', $node) }}" method="POST" class="inline" onsubmit="return confirm('ยืนยันปลดแบน Node {{ $node->node_id }}?')">
+                                @csrf
+                                <button type="submit" class="text-green-400 hover:text-green-300" title="ปลดแบน">
+                                    <i class="fas fa-check-circle"></i>
+                                </button>
+                            </form>
+                            @endif
+                            <form action="{{ route('admin.nodes.delete', $node) }}" method="POST" class="inline" onsubmit="return confirm('ยืนยันลบ Node {{ $node->node_id }}? การกระทำนี้ไม่สามารถยกเลิกได้!')">
+                                @csrf
+                                @method('DELETE')
+                                <button type="submit" class="text-red-500 hover:text-red-400" title="ลบ">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </form>
+                        </div>
+                    </td>
                 </tr>
                 @empty
                 <tr>
-                    <td colspan="8" class="px-6 py-12 text-center text-gray-500">No nodes found</td>
+                    <td colspan="9" class="px-6 py-12 text-center text-gray-500">No nodes found</td>
                 </tr>
                 @endforelse
             </tbody>
@@ -115,4 +148,49 @@
     </div>
     @endif
 </div>
+
+<!-- Status Change Modal -->
+<div id="statusModal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+    <div class="bg-gray-800 rounded-xl p-6 w-full max-w-md border border-gray-700">
+        <h3 class="text-xl font-bold mb-4">เปลี่ยนสถานะ Node</h3>
+        <p class="text-gray-400 mb-4">Node: <span id="status_node_id" class="text-white font-mono"></span></p>
+        <form id="statusForm" method="POST">
+            @csrf
+            @method('PATCH')
+            <div class="mb-4">
+                <label class="block text-sm text-gray-400 mb-1">สถานะใหม่</label>
+                <select name="status" id="status_select" class="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white">
+                    <option value="online">Online</option>
+                    <option value="offline">Offline</option>
+                    <option value="idle">Idle</option>
+                    <option value="maintenance">Maintenance</option>
+                    <option value="banned">Banned</option>
+                </select>
+            </div>
+            <div class="flex gap-3">
+                <button type="submit" class="flex-1 bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg">บันทึก</button>
+                <button type="button" onclick="closeStatusModal()" class="flex-1 bg-gray-600 hover:bg-gray-700 px-4 py-2 rounded-lg">ยกเลิก</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+function openStatusModal(nodeId, nodeCode, currentStatus) {
+    document.getElementById('statusForm').action = `/admin/nodes/${nodeId}/status`;
+    document.getElementById('status_node_id').textContent = nodeCode;
+    document.getElementById('status_select').value = currentStatus;
+    document.getElementById('statusModal').classList.remove('hidden');
+}
+
+function closeStatusModal() {
+    document.getElementById('statusModal').classList.add('hidden');
+}
+
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        closeStatusModal();
+    }
+});
+</script>
 @endsection

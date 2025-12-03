@@ -7,7 +7,7 @@
 #ifndef API_H
 #define API_H
 
-#include <stdbool.h>
+// types.h includes common.h which includes stdbool.h
 #include "types.h"
 
 // API Response structure
@@ -97,6 +97,30 @@ bool API_ReportError(const char* token, const char* node_id, const char* chunk_i
 
 // ============ Earnings API ============
 bool API_GetEarningsSummary(const char* token, EarningsSummary* summary);
+
+// ============ Model Management API ============
+// Model info from server
+typedef struct {
+    char model_id[64];
+    char name[128];
+    char category[32];
+    int vram_required_mb;
+    int size_mb;
+    bool is_installed;
+    bool is_enabled;
+} ModelData;
+
+// Get available models for this node's VRAM tier
+bool API_GetAvailableModels(const char* token, const char* node_id, int gpu_vram_mb,
+                            ModelData* models, int* model_count, int max_models);
+
+// Update installed models on node
+bool API_UpdateInstalledModels(const char* token, const char* node_id,
+                                const char* model_ids_json);
+
+// Update model enabled/disabled status for work
+bool API_UpdateModelStatus(const char* token, const char* node_id,
+                           const char* model_id, bool enabled);
 
 // ============ Utility ============
 bool API_Ping(void);

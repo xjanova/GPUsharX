@@ -53,13 +53,27 @@ class JobAssemblerService
         ]);
 
         try {
-            $result = match ($job->chunking_strategy) {
-                'tile_based' => $this->assembleTiles($job),
-                'step_based' => $this->assembleSteps($job),
-                'batch_based' => $this->assembleBatch($job),
-                'hybrid' => $this->assembleHybrid($job),
-                default => $this->assembleTiles($job),
-            };
+            // Check if this is an admin test job
+            $isAdminTest = $job->job_params['is_admin_test'] ?? false;
+
+            // Check if we have real uploaded results from workers
+            $hasRealResults = $job->chunks()->whereNotNull('partial_result_url')->exists();
+
+            if ($hasRealResults) {
+                // Use real uploaded results from worker
+                $result = $this->assembleFromPartialResults($job);
+            } elseif ($isAdminTest) {
+                // Fallback to simulated result for admin tests without real uploads
+                $result = $this->createSimulatedResult($job);
+            } else {
+                $result = match ($job->chunking_strategy) {
+                    'tile_based' => $this->assembleTiles($job),
+                    'step_based' => $this->assembleSteps($job),
+                    'batch_based' => $this->assembleBatch($job),
+                    'hybrid' => $this->assembleHybrid($job),
+                    default => $this->assembleTiles($job),
+                };
+            }
 
             // บันทึกผลลัพธ์
             $job->update([
@@ -70,12 +84,13 @@ class JobAssemblerService
                 'assembly_completed_at' => now(),
             ]);
 
-            // แจ้ง Customer
+            // แจ้ง Customer / อัพเดท GenerationJob
             $this->notifyJobCompleted($job, $result);
 
             Log::info("Job {$job->job_id} assembled successfully", [
                 'total_chunks' => $job->chunks()->count(),
                 'final_url' => $result['url'],
+                'is_admin_test' => $isAdminTest,
             ]);
 
             return true;
@@ -83,6 +98,7 @@ class JobAssemblerService
         } catch (\Exception $e) {
             Log::error("Job assembly failed: {$job->job_id}", [
                 'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
             ]);
 
             $job->update([
@@ -91,6 +107,141 @@ class JobAssemblerService
 
             return false;
         }
+    }
+
+    /**
+     * Assemble from real uploaded partial results
+     */
+    private function assembleFromPartialResults(RenderJob $job): array
+    {
+        $chunks = $job->chunks()->orderBy('chunk_index')->get();
+
+        // For single chunk jobs, just copy the partial result
+        if ($chunks->count() === 1) {
+            $chunk = $chunks->first();
+            $sourceUrl = $chunk->partial_result_url;
+
+            // Parse the source path from URL
+            $sourcePath = str_replace(asset('storage') . '/', '', $sourceUrl);
+
+            // If it's already a full URL from storage, extract path
+            if (str_starts_with($sourcePath, 'http')) {
+                $sourcePath = parse_url($sourceUrl, PHP_URL_PATH);
+                $sourcePath = str_replace('/storage/', '', $sourcePath);
+            }
+
+            // Copy to final result location
+            $outputPath = "results/{$job->job_id}_final.png";
+
+            // Check if source exists in storage
+            if (Storage::disk('public')->exists($sourcePath)) {
+                Storage::disk('public')->copy($sourcePath, $outputPath);
+            } else {
+                // Try to download from URL
+                $imageData = @file_get_contents($sourceUrl);
+                if ($imageData) {
+                    Storage::disk('public')->put($outputPath, $imageData);
+                } else {
+                    throw new \Exception("Cannot access partial result: {$sourceUrl}");
+                }
+            }
+
+            // Get image dimensions
+            $fullPath = storage_path("app/public/{$outputPath}");
+            $imageInfo = @getimagesize($fullPath);
+            $width = $imageInfo[0] ?? 1024;
+            $height = $imageInfo[1] ?? 1024;
+
+            return [
+                'url' => asset("storage/{$outputPath}"),
+                'path' => $outputPath,
+                'width' => $width,
+                'height' => $height,
+                'source' => 'worker_upload',
+            ];
+        }
+
+        // For multiple chunks, use tile assembly
+        return $this->assembleTiles($job);
+    }
+
+    /**
+     * สร้าง Simulated Result สำหรับ Admin Test Jobs
+     */
+    private function createSimulatedResult(RenderJob $job): array
+    {
+        $params = $job->job_params ?? [];
+        $width = $params['width'] ?? 1024;
+        $height = $params['height'] ?? 1024;
+        $prompt = $params['prompt'] ?? 'Test Image';
+
+        // สร้างรูป placeholder
+        $image = imagecreatetruecolor($width, $height);
+
+        // Gradient background
+        for ($y = 0; $y < $height; $y++) {
+            $ratio = $y / $height;
+            $r = (int)(100 + 80 * $ratio);
+            $g = (int)(50 + 100 * $ratio);
+            $b = (int)(150 + 50 * (1 - $ratio));
+            $color = imagecolorallocate($image, $r, $g, $b);
+            imageline($image, 0, $y, $width, $y, $color);
+        }
+
+        // Add text overlay
+        $textColor = imagecolorallocate($image, 255, 255, 255);
+        $shadowColor = imagecolorallocate($image, 0, 0, 0);
+
+        // Title
+        $title = "Admin Test Result";
+        imagestring($image, 5, $width/2 - 70 + 1, 20 + 1, $title, $shadowColor);
+        imagestring($image, 5, $width/2 - 70, 20, $title, $textColor);
+
+        // Job ID
+        $jobText = "Job: " . $job->job_id;
+        imagestring($image, 3, 20 + 1, $height - 60 + 1, $jobText, $shadowColor);
+        imagestring($image, 3, 20, $height - 60, $jobText, $textColor);
+
+        // Prompt (truncated)
+        $promptText = "Prompt: " . substr($prompt, 0, 50) . (strlen($prompt) > 50 ? '...' : '');
+        imagestring($image, 2, 20 + 1, $height - 40 + 1, $promptText, $shadowColor);
+        imagestring($image, 2, 20, $height - 40, $promptText, $textColor);
+
+        // Timestamp
+        $timeText = "Generated: " . now()->format('Y-m-d H:i:s');
+        imagestring($image, 2, 20 + 1, $height - 20 + 1, $timeText, $shadowColor);
+        imagestring($image, 2, 20, $height - 20, $timeText, $textColor);
+
+        // Center decoration
+        $centerX = $width / 2;
+        $centerY = $height / 2;
+        for ($i = 0; $i < 5; $i++) {
+            $radius = 50 + $i * 30;
+            $alpha = 100 - $i * 15;
+            $circleColor = imagecolorallocatealpha($image, 255, 255, 255, $alpha);
+            imageellipse($image, $centerX, $centerY, $radius * 2, $radius * 2, $circleColor);
+        }
+
+        // บันทึกไฟล์
+        $outputPath = "results/{$job->job_id}_final.png";
+        $fullPath = storage_path("app/public/{$outputPath}");
+
+        // สร้าง directory ถ้ายังไม่มี
+        $dir = dirname($fullPath);
+        if (!is_dir($dir)) {
+            mkdir($dir, 0755, true);
+        }
+
+        imagepng($image, $fullPath, 9);
+        imagedestroy($image);
+
+        return [
+            'url' => asset("storage/{$outputPath}"),
+            'path' => $outputPath,
+            'width' => $width,
+            'height' => $height,
+            'simulated' => true,
+        ];
     }
 
     /**
@@ -432,19 +583,41 @@ class JobAssemblerService
      */
     private function notifyJobCompleted(RenderJob $job, array $result): void
     {
-        // TODO: Implement notification (email, webhook, etc.)
         Log::info("Job completed notification", [
             'job_id' => $job->job_id,
-            'user_id' => $job->user_id,
+            'user_id' => $job->created_by,
             'result_url' => $result['url'],
         ]);
 
-        // อัพเดท Generation record ถ้ามี
-        if ($job->generation) {
-            $job->generation->update([
-                'status' => 'completed',
-                'result_url' => $result['url'],
-            ]);
+        // อัพเดท GenerationJob ถ้ามี
+        $generationJobId = $job->job_params['generation_job_id'] ?? null;
+        if ($generationJobId) {
+            $generationJob = \App\Models\GenerationJob::find($generationJobId);
+            if ($generationJob) {
+                $processingTime = $generationJob->created_at
+                    ? $generationJob->created_at->diffInMilliseconds(now())
+                    : null;
+
+                $generationJob->update([
+                    'status' => 'completed',
+                    'progress' => 100,
+                    'result_url' => $result['url'],
+                    'result_thumbnail' => $result['url'],
+                    'processing_time_ms' => $processingTime,
+                    'result_metadata' => [
+                        'width' => $result['width'] ?? null,
+                        'height' => $result['height'] ?? null,
+                        'simulated' => $result['simulated'] ?? false,
+                        'completed_at' => now()->toIso8601String(),
+                    ],
+                ]);
+
+                Log::info("GenerationJob updated", [
+                    'generation_job_id' => $generationJobId,
+                    'status' => 'completed',
+                    'result_url' => $result['url'],
+                ]);
+            }
         }
     }
 

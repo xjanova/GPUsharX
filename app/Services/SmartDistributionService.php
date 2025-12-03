@@ -220,18 +220,60 @@ class SmartDistributionService
     }
 
     /**
-     * ดึง available nodes พร้อม filter
+     * ดึง available nodes พร้อม filter ตาม VRAM requirement
+     *
+     * สำคัญ: ต้องเช็ค VRAM ของ node ให้พอสำหรับงาน
+     * - ถ้างานต้องการ VRAM > node มี → node นั้นทำไม่ได้
+     * - ถ้างานถูกแบ่ง (chunked) → แต่ละ chunk จะมี required_vram_mb ของตัวเอง
      */
     protected function getAvailableNodes(RenderJob $job): Collection
     {
-        $requiredVram = $job->required_vram_mb ?? 0;
+        $requiredVram = $job->required_vram_mb ?? 4000;
+        $modelId = $job->job_params['model_id'] ?? $job->model_id ?? null;
 
-        return GpuNode::availableForWork()
-            ->where('gpu_vram_mb', '>=', $requiredVram)
-            ->where('is_verified', true)
+        $query = GpuNode::availableForWork()
+            ->where('is_verified', true);
+
+        // Filter by VRAM - node ต้องมี VRAM พอสำหรับงาน
+        // แต่ถ้าเป็น admin test job ให้ข้ามการเช็ค
+        $isAdminTest = $job->job_params['is_admin_test'] ?? false;
+        if (!$isAdminTest) {
+            $query->where('gpu_vram_mb', '>=', $requiredVram);
+        }
+
+        // Filter by installed models (ถ้ามี model_id)
+        if ($modelId && !$isAdminTest) {
+            $query->where(function ($q) use ($modelId) {
+                // Node ต้องมี model ติดตั้ง หรือ installed_models เป็น null (accept all)
+                $q->whereNull('installed_models')
+                  ->orWhereJsonContains('installed_models', $modelId);
+            });
+        }
+
+        return $query
             ->orderBy('performance_score', 'desc')
             ->orderBy('hashrate', 'desc')
             ->get();
+    }
+
+    /**
+     * ดึง nodes ที่รองรับ VRAM ระดับต่างๆ (สำหรับ smart chunking)
+     */
+    protected function getNodesByVramTier(RenderJob $job): array
+    {
+        $allNodes = GpuNode::availableForWork()
+            ->where('is_verified', true)
+            ->orderBy('gpu_vram_mb', 'desc')
+            ->get();
+
+        return [
+            'tier_24gb' => $allNodes->filter(fn($n) => ($n->gpu_vram_mb ?? 0) >= 24000),
+            'tier_12gb' => $allNodes->filter(fn($n) => ($n->gpu_vram_mb ?? 0) >= 12000 && ($n->gpu_vram_mb ?? 0) < 24000),
+            'tier_8gb' => $allNodes->filter(fn($n) => ($n->gpu_vram_mb ?? 0) >= 8000 && ($n->gpu_vram_mb ?? 0) < 12000),
+            'tier_6gb' => $allNodes->filter(fn($n) => ($n->gpu_vram_mb ?? 0) >= 6000 && ($n->gpu_vram_mb ?? 0) < 8000),
+            'tier_4gb' => $allNodes->filter(fn($n) => ($n->gpu_vram_mb ?? 0) >= 4000 && ($n->gpu_vram_mb ?? 0) < 6000),
+            'tier_3gb' => $allNodes->filter(fn($n) => ($n->gpu_vram_mb ?? 0) >= 3000 && ($n->gpu_vram_mb ?? 0) < 4000),
+        ];
     }
 
     /**
@@ -381,11 +423,8 @@ class SmartDistributionService
      */
     protected function findBestSingleWorker(Collection $nodes, RenderJob $job): GpuNode
     {
-        $requiredVram = $job->required_vram_mb ?? 0;
-
         // เรียงตาม: 1. performance_score, 2. success_rate, 3. hashrate
         return $nodes
-            ->filter(fn($n) => $n->gpu_vram_mb >= $requiredVram)
             ->sortByDesc(function ($node) {
                 return (
                     ($node->performance_score ?? 0) * 0.5 +
@@ -423,13 +462,8 @@ class SmartDistributionService
      */
     protected function selectNodesForParallel(Collection $nodes, int $count, RenderJob $job): Collection
     {
-        $requiredVram = $job->required_vram_mb ?? 0;
-
-        // กรอง nodes ที่ผ่าน VRAM requirement
-        $eligible = $nodes->filter(fn($n) => $n->gpu_vram_mb >= $requiredVram);
-
-        // เรียงตาม combined score
-        $sorted = $eligible->sortByDesc(function ($node) {
+        // เรียงตาม combined score (ไม่เช็ค VRAM เพราะงานจะถูกแบ่งให้เหมาะสม)
+        $sorted = $nodes->sortByDesc(function ($node) {
             return (
                 ($node->performance_score ?? 50) * 0.4 +
                 ($node->hashrate ?? 0) / 100 * 0.3 +

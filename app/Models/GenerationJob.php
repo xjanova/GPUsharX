@@ -30,11 +30,17 @@ class GenerationJob extends Model
         'error_message',
         'visibility',
         'likes',
+        'refunded_at',
+        'refunded_amount',
+        'is_admin_test',
+        'created_by',
     ];
 
     protected $casts = [
         'params' => 'array',
         'result_metadata' => 'array',
+        'refunded_at' => 'datetime',
+        'refunded_amount' => 'decimal:2',
     ];
 
     protected static function boot()
@@ -76,5 +82,49 @@ class GenerationJob extends Model
     public function scopeQueued($query)
     {
         return $query->where('status', 'queued');
+    }
+
+    /**
+     * Get required VRAM from the associated AI Model
+     */
+    public function getRequiredVramMbAttribute(): int
+    {
+        // Check if explicitly set in params
+        if (isset($this->params['required_vram_mb'])) {
+            return (int) $this->params['required_vram_mb'];
+        }
+
+        // Get from AI Model
+        if ($this->aiModel) {
+            return $this->aiModel->vram_required_mb ?? 4096;
+        }
+
+        // Default based on type
+        $defaults = [
+            'image' => 4096,
+            'video' => 12288,
+            'upscale' => 8192,
+        ];
+
+        return $defaults[$this->type] ?? 4096;
+    }
+
+    /**
+     * Check if a node can process this job
+     */
+    public function canBeProcessedBy(GpuNode $node): bool
+    {
+        // Check VRAM
+        if (($node->gpu_vram_mb ?? 0) < $this->required_vram_mb) {
+            return false;
+        }
+
+        // Check if node has the model installed (if required)
+        $modelId = $this->aiModel?->model_id;
+        if ($modelId && !$node->hasModel($modelId)) {
+            return false;
+        }
+
+        return true;
     }
 }

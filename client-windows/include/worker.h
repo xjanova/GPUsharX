@@ -7,7 +7,7 @@
 #ifndef WORKER_H
 #define WORKER_H
 
-#include <stdbool.h>
+// types.h includes common.h which includes stdbool.h and windows.h
 #include "types.h"
 #include "api.h"
 

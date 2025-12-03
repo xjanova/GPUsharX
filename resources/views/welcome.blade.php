@@ -85,6 +85,9 @@
                     <a href="/models" class="text-gray-300 hover:text-white transition">Models</a>
                     <a href="/gallery" class="text-gray-300 hover:text-white transition">Gallery</a>
                     <a href="#earnings" class="text-gray-300 hover:text-white transition">Earn</a>
+                    <a href="/pitch" class="text-gray-300 hover:text-white transition flex items-center gap-1">
+                        <i class="fas fa-chart-line text-sm"></i>Investors
+                    </a>
                 </div>
                 <div class="flex items-center space-x-4">
                     <a href="/login" class="text-gray-300 hover:text-white px-4 py-2">Login</a>
@@ -331,6 +334,170 @@
         </div>
     </section>
 
+    <!-- VRAM Tier Support Section (Any GPU Welcome!) -->
+    <section class="relative py-24 px-4 bg-gradient-to-b from-transparent to-gray-900/50">
+        <div class="max-w-7xl mx-auto">
+            <div class="text-center mb-16">
+                <div class="inline-flex items-center px-4 py-2 rounded-full glass text-sm text-green-300 mb-6">
+                    <i class="fas fa-check-circle text-green-400 mr-2"></i>
+                    Any GPU 3GB+ Can Earn!
+                </div>
+                <h2 class="text-4xl font-bold mb-4">
+                    <span class="gradient-text">Smart VRAM Technology</span>
+                </h2>
+                <p class="text-gray-400 text-lg max-w-3xl mx-auto">
+                    Our proprietary Smart Chunking algorithm allows GPUs with as little as 3GB VRAM to participate.
+                    No expensive hardware required - earn with what you have!
+                </p>
+            </div>
+
+            <!-- VRAM Tier Cards -->
+            <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-12">
+                <!-- Ultra Low (3GB) -->
+                <div class="glass rounded-2xl p-4 card-hover border-l-4 border-red-500">
+                    <div class="text-center">
+                        <i class="fas fa-microchip text-2xl text-red-400 mb-2"></i>
+                        <h4 class="font-bold text-sm">Ultra Low</h4>
+                        <p class="text-2xl font-bold text-red-400">2-3 GB</p>
+                        <p class="text-xs text-gray-500 mt-1">GT 1030, GTX 1050</p>
+                        <div class="mt-2 text-xs">
+                            <span class="text-green-400">256x256 tiles</span>
+                        </div>
+                    </div>
+                </div>
+                <!-- Very Low (4GB) -->
+                <div class="glass rounded-2xl p-4 card-hover border-l-4 border-orange-500">
+                    <div class="text-center">
+                        <i class="fas fa-microchip text-2xl text-orange-400 mb-2"></i>
+                        <h4 class="font-bold text-sm">Very Low</h4>
+                        <p class="text-2xl font-bold text-orange-400">3-4 GB</p>
+                        <p class="text-xs text-gray-500 mt-1">GTX 1650, RX 570</p>
+                        <div class="mt-2 text-xs">
+                            <span class="text-green-400">512x512 tiles</span>
+                        </div>
+                    </div>
+                </div>
+                <!-- Low (6GB) -->
+                <div class="glass rounded-2xl p-4 card-hover border-l-4 border-yellow-500">
+                    <div class="text-center">
+                        <i class="fas fa-microchip text-2xl text-yellow-400 mb-2"></i>
+                        <h4 class="font-bold text-sm">Low</h4>
+                        <p class="text-2xl font-bold text-yellow-400">4-6 GB</p>
+                        <p class="text-xs text-gray-500 mt-1">RTX 2060, GTX 1660</p>
+                        <div class="mt-2 text-xs">
+                            <span class="text-green-400">768x768 tiles</span>
+                        </div>
+                    </div>
+                </div>
+                <!-- Medium (8GB) -->
+                <div class="glass rounded-2xl p-4 card-hover border-l-4 border-teal-500">
+                    <div class="text-center">
+                        <i class="fas fa-microchip text-2xl text-teal-400 mb-2"></i>
+                        <h4 class="font-bold text-sm">Medium</h4>
+                        <p class="text-2xl font-bold text-teal-400">6-8 GB</p>
+                        <p class="text-xs text-gray-500 mt-1">RTX 3060, RTX 3070</p>
+                        <div class="mt-2 text-xs">
+                            <span class="text-green-400">1024x1024</span>
+                        </div>
+                    </div>
+                </div>
+                <!-- High (12GB) -->
+                <div class="glass rounded-2xl p-4 card-hover border-l-4 border-blue-500">
+                    <div class="text-center">
+                        <i class="fas fa-microchip text-2xl text-blue-400 mb-2"></i>
+                        <h4 class="font-bold text-sm">High</h4>
+                        <p class="text-2xl font-bold text-blue-400">8-12 GB</p>
+                        <p class="text-xs text-gray-500 mt-1">RTX 3080, RTX 4070</p>
+                        <div class="mt-2 text-xs">
+                            <span class="text-green-400">Full SDXL</span>
+                        </div>
+                    </div>
+                </div>
+                <!-- Ultra (12GB+) -->
+                <div class="glass rounded-2xl p-4 card-hover border-l-4 border-purple-500">
+                    <div class="text-center">
+                        <i class="fas fa-microchip text-2xl text-purple-400 mb-2"></i>
+                        <h4 class="font-bold text-sm">Ultra</h4>
+                        <p class="text-2xl font-bold text-purple-400">12+ GB</p>
+                        <p class="text-xs text-gray-500 mt-1">RTX 4090, A100</p>
+                        <div class="mt-2 text-xs">
+                            <span class="text-green-400">All Models</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Smart Chunking Explanation -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                <div class="glass rounded-2xl p-8 card-hover">
+                    <h3 class="text-xl font-bold mb-4 flex items-center">
+                        <i class="fas fa-puzzle-piece text-purple-400 mr-3"></i>
+                        Smart Job Chunking
+                    </h3>
+                    <p class="text-gray-400 mb-4">
+                        Large AI generation jobs are automatically split into smaller chunks that match your GPU's capabilities:
+                    </p>
+                    <ul class="space-y-2 text-sm">
+                        <li class="flex items-center text-gray-300">
+                            <i class="fas fa-check text-green-400 mr-2"></i>
+                            <strong>Tile-Based:</strong>&nbsp;Split large images into smaller tiles
+                        </li>
+                        <li class="flex items-center text-gray-300">
+                            <i class="fas fa-check text-green-400 mr-2"></i>
+                            <strong>Step-Based:</strong>&nbsp;Divide denoising steps across workers
+                        </li>
+                        <li class="flex items-center text-gray-300">
+                            <i class="fas fa-check text-green-400 mr-2"></i>
+                            <strong>Hybrid:</strong>&nbsp;Combine tiles + steps for maximum efficiency
+                        </li>
+                        <li class="flex items-center text-gray-300">
+                            <i class="fas fa-check text-green-400 mr-2"></i>
+                            <strong>Micro:</strong>&nbsp;256x256 tiles for ultra-low VRAM GPUs
+                        </li>
+                    </ul>
+                </div>
+
+                <div class="glass rounded-2xl p-8 card-hover">
+                    <h3 class="text-xl font-bold mb-4 flex items-center">
+                        <i class="fas fa-coins text-yellow-400 mr-3"></i>
+                        Low VRAM Bonus
+                    </h3>
+                    <p class="text-gray-400 mb-4">
+                        GPUs with lower VRAM receive bonus earnings to compensate for smaller chunk sizes:
+                    </p>
+                    <div class="space-y-3">
+                        <div class="flex justify-between items-center bg-gray-800/50 rounded-lg p-3">
+                            <span class="text-gray-300">Ultra Low (2-3GB)</span>
+                            <span class="text-green-400 font-bold">+15% Bonus</span>
+                        </div>
+                        <div class="flex justify-between items-center bg-gray-800/50 rounded-lg p-3">
+                            <span class="text-gray-300">Very Low (3-4GB)</span>
+                            <span class="text-green-400 font-bold">+12% Bonus</span>
+                        </div>
+                        <div class="flex justify-between items-center bg-gray-800/50 rounded-lg p-3">
+                            <span class="text-gray-300">Low (4-6GB)</span>
+                            <span class="text-green-400 font-bold">+10% Bonus</span>
+                        </div>
+                        <div class="flex justify-between items-center bg-gray-800/50 rounded-lg p-3">
+                            <span class="text-gray-300">Medium+ (6GB+)</span>
+                            <span class="text-gray-400">Standard Rate</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- CTA for low VRAM users -->
+            <div class="text-center mt-12">
+                <p class="text-gray-400 mb-4">
+                    Have an older GPU? Don't let it sit idle - start earning today!
+                </p>
+                <a href="/download" class="inline-block bg-gradient-to-r from-green-600 to-teal-600 hover:from-green-500 hover:to-teal-500 px-8 py-4 rounded-xl font-bold transition">
+                    <i class="fas fa-download mr-2"></i>Download Client & Start Earning
+                </a>
+            </div>
+        </div>
+    </section>
+
     <!-- Referral Section -->
     <section class="relative py-24 px-4">
         <div class="max-w-5xl mx-auto">
@@ -369,15 +536,80 @@
     <!-- Footer -->
     <footer class="relative py-12 px-4 border-t border-gray-800/50">
         <div class="max-w-7xl mx-auto">
-            <div class="flex flex-col md:flex-row justify-between items-center">
-                <div class="flex items-center mb-4 md:mb-0">
-                    <i class="fas fa-microchip text-purple-500 text-xl mr-2"></i>
-                    <span class="font-bold">GPU Share</span>
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
+                <!-- Brand -->
+                <div>
+                    <div class="flex items-center mb-4">
+                        <i class="fas fa-microchip text-purple-500 text-xl mr-2"></i>
+                        <span class="font-bold text-lg">GPU Share</span>
+                    </div>
+                    <p class="text-gray-500 text-sm">แพลตฟอร์มแชร์พลัง GPU สำหรับสร้างภาพและวิดีโอ AI</p>
                 </div>
-                <div class="text-center md:text-right">
-                    <p class="text-gray-500 text-sm">
-                        © 2025 <span class="text-purple-400">Xman Studio Thailand</span>. All rights reserved.
-                    </p>
+
+                <!-- Links -->
+                <div>
+                    <h4 class="font-semibold mb-4 text-gray-300">Platform</h4>
+                    <ul class="space-y-2 text-sm">
+                        <li><a href="/generate" class="text-gray-500 hover:text-white transition">Generate</a></li>
+                        <li><a href="/models" class="text-gray-500 hover:text-white transition">AI Models</a></li>
+                        <li><a href="/gallery" class="text-gray-500 hover:text-white transition">Gallery</a></li>
+                        <li><a href="/download" class="text-gray-500 hover:text-white transition">Download Client</a></li>
+                    </ul>
+                </div>
+
+                <!-- Resources -->
+                <div>
+                    <h4 class="font-semibold mb-4 text-gray-300">Resources</h4>
+                    <ul class="space-y-2 text-sm">
+                        <li><a href="#earnings" class="text-gray-500 hover:text-white transition">Earn Credits</a></li>
+                        <li><a href="/credits/buy" class="text-gray-500 hover:text-white transition">Buy Credits</a></li>
+                        <li><a href="/faq" class="text-gray-500 hover:text-white transition">FAQ</a></li>
+                        <li><a href="/support" class="text-gray-500 hover:text-white transition">Support</a></li>
+                    </ul>
+                </div>
+
+                <!-- Investors -->
+                <div>
+                    <h4 class="font-semibold mb-4 text-gray-300">Investors</h4>
+                    <ul class="space-y-2 text-sm">
+                        <li>
+                            <a href="/pitch" class="text-gray-500 hover:text-white transition flex items-center gap-2">
+                                <i class="fas fa-file-pdf text-red-400"></i>
+                                Pitch Deck
+                            </a>
+                        </li>
+                        <li>
+                            <a href="/pitch#business-model" class="text-gray-500 hover:text-white transition flex items-center gap-2">
+                                <i class="fas fa-chart-pie text-blue-400"></i>
+                                Business Model
+                            </a>
+                        </li>
+                        <li>
+                            <a href="/pitch#roadmap" class="text-gray-500 hover:text-white transition flex items-center gap-2">
+                                <i class="fas fa-road text-green-400"></i>
+                                Roadmap
+                            </a>
+                        </li>
+                        <li>
+                            <a href="/pitch#team" class="text-gray-500 hover:text-white transition flex items-center gap-2">
+                                <i class="fas fa-users text-purple-400"></i>
+                                Team
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Bottom -->
+            <div class="pt-8 border-t border-gray-800/50 flex flex-col md:flex-row justify-between items-center">
+                <p class="text-gray-500 text-sm mb-4 md:mb-0">
+                    © 2025 <span class="text-purple-400">Xman Studio Thailand</span>. All rights reserved.
+                </p>
+                <div class="flex items-center gap-4">
+                    <a href="/pitch" class="glass px-4 py-2 rounded-lg text-sm text-purple-300 hover:text-white transition flex items-center gap-2">
+                        <i class="fas fa-chart-line"></i>
+                        For Investors
+                    </a>
                 </div>
             </div>
         </div>

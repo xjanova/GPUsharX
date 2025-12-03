@@ -40,10 +40,13 @@ class GpuNode extends Model
         'total_earnings',
         'total_uptime_hours',
         'last_evaluation_at',
+        // Model management
+        'installed_models',
     ];
 
     protected $casts = [
         'gpu_specs' => 'array',
+        'installed_models' => 'array',
         'last_heartbeat' => 'datetime',
         'last_benchmark' => 'datetime',
         'last_evaluation_at' => 'datetime',
@@ -122,6 +125,80 @@ class GpuNode extends Model
     public function scopeTopPerformers($query, int $limit = 10)
     {
         return $query->orderBy('performance_score', 'desc')->limit($limit);
+    }
+
+    /**
+     * Filter nodes by minimum VRAM
+     */
+    public function scopeWithMinVram($query, int $minVramMb)
+    {
+        return $query->where('gpu_vram_mb', '>=', $minVramMb);
+    }
+
+    /**
+     * Filter nodes by VRAM tier
+     */
+    public function scopeByVramTier($query, string $tier)
+    {
+        $tiers = [
+            '3gb' => [3000, 3999],
+            '4gb' => [4000, 5999],
+            '6gb' => [6000, 7999],
+            '8gb' => [8000, 11999],
+            '12gb' => [12000, 23999],
+            '24gb' => [24000, 999999],
+        ];
+
+        if (!isset($tiers[$tier])) {
+            return $query;
+        }
+
+        [$min, $max] = $tiers[$tier];
+        return $query->whereBetween('gpu_vram_mb', [$min, $max]);
+    }
+
+    /**
+     * Filter nodes that have a specific model installed
+     */
+    public function scopeWithModel($query, string $modelId)
+    {
+        return $query->where(function ($q) use ($modelId) {
+            $q->whereNull('installed_models')
+              ->orWhereJsonContains('installed_models', $modelId);
+        });
+    }
+
+    /**
+     * Check if node can handle a job with given VRAM requirement
+     */
+    public function canHandleVram(int $requiredVramMb): bool
+    {
+        return ($this->gpu_vram_mb ?? 0) >= $requiredVramMb;
+    }
+
+    /**
+     * Check if node has a specific model installed
+     */
+    public function hasModel(string $modelId): bool
+    {
+        $installed = $this->installed_models ?? [];
+        return empty($installed) || in_array($modelId, $installed);
+    }
+
+    /**
+     * Get VRAM tier name
+     */
+    public function getVramTierAttribute(): string
+    {
+        $vram = $this->gpu_vram_mb ?? 0;
+
+        if ($vram >= 24000) return '24gb+';
+        if ($vram >= 12000) return '12gb';
+        if ($vram >= 8000) return '8gb';
+        if ($vram >= 6000) return '6gb';
+        if ($vram >= 4000) return '4gb';
+        if ($vram >= 3000) return '3gb';
+        return 'low';
     }
 
     /**

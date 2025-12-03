@@ -8,11 +8,22 @@
 
 // Application Info
 #define APP_NAME            "GPU Share Client"
-#define APP_VERSION         "1.0.0"
+#define APP_VERSION         "1.1.0"
 #define APP_AUTHOR          "Xman Studio Thailand"
 
+// VRAM Tiers (in MB)
+#define VRAM_TIER_3GB       3072
+#define VRAM_TIER_4GB       4096
+#define VRAM_TIER_6GB       6144
+#define VRAM_TIER_8GB       8192
+#define VRAM_TIER_12GB      12288
+#define VRAM_TIER_16GB      16384
+#define VRAM_TIER_24GB      24576
+
 // API Configuration - Local Development
-#define API_HOST            "127.0.0.1"
+// ใช้ localhost:8000 สำหรับ php artisan serve
+// หรือ gpu-sharing-platform.test สำหรับ Laragon vhost
+#define API_HOST            "localhost"
 #define API_PORT            8000
 #define API_BASE_PATH       "/api"
 #define API_USE_HTTPS       0       // 0 = HTTP, 1 = HTTPS

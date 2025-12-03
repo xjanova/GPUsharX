@@ -28,7 +28,7 @@ class AuthController extends Controller
         $user = User::create([
             'name' => $validated['name'],
             'email' => $validated['email'],
-            'password' => Hash::make($validated['password']),
+            'password' => $validated['password'], // User model casts will auto-hash
             'referred_by' => $referrer?->id,
         ]);
 

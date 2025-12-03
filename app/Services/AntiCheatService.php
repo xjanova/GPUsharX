@@ -12,16 +12,17 @@ class AntiCheatService
 {
     protected array $suspiciousPatterns = [];
 
-    public function validateNodeRegistration(array $systemInfo): array
+    public function validateNodeRegistration(array $systemInfo, ?int $userId = null): array
     {
         $issues = [];
 
         // Check if machine_id already exists with different user
         if (isset($systemInfo['machine_id'])) {
             $existingNode = GpuNode::where('machine_id', $systemInfo['machine_id'])->first();
-            if ($existingNode) {
-                $issues[] = 'Machine ID already registered';
+            if ($existingNode && $userId && $existingNode->user_id !== $userId) {
+                $issues[] = 'Machine ID already registered to another user';
             }
+            // If same user, allow reconnection (no issue added)
         }
 
         // Validate GPU info is realistic

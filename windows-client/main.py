@@ -19,7 +19,7 @@ from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QPushButton, QLineEdit, QTextEdit, QProgressBar,
     QTabWidget, QGroupBox, QFormLayout, QMessageBox, QStackedWidget,
-    QFrame, QSlider, QSpinBox
+    QFrame, QSlider, QSpinBox, QScrollArea, QListWidget, QListWidgetItem
 )
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QObject
 from PyQt6.QtGui import QFont, QPalette, QColor
@@ -28,6 +28,7 @@ from config import CLIENT_VERSION, HEARTBEAT_INTERVAL, WORK_POLL_INTERVAL
 from api_client import APIClient, APIError
 from hardware_info import HardwareInfo
 from worker import GPUWorker
+from model_manager import ModelManager
 
 # Setup logging
 logging.basicConfig(
@@ -50,6 +51,9 @@ class WorkerSignals(QObject):
     work_completed = pyqtSignal(dict)
     error = pyqtSignal(str)
     connection_status = pyqtSignal(bool)
+    # Model download signals
+    model_download_progress = pyqtSignal(str, str, int, str)  # model_id, status, progress, error
+    models_updated = pyqtSignal()
 
 
 class GPUClientApp(QMainWindow):
@@ -59,6 +63,7 @@ class GPUClientApp(QMainWindow):
         self.api = APIClient()
         self.hardware = HardwareInfo()
         self.worker = GPUWorker()
+        self.model_manager = ModelManager()
         self.signals = WorkerSignals()
 
         self.node_id = None
@@ -66,6 +71,7 @@ class GPUClientApp(QMainWindow):
         self.user_data = None
         self.is_connected = False
         self.gpu_power_limit = 100  # Default 100%
+        self.available_models = []  # Models available for download
 
         self.setup_ui()
         self.setup_signals()
@@ -73,6 +79,9 @@ class GPUClientApp(QMainWindow):
 
         self.load_saved_settings()
         self.load_saved_token()
+
+        # Setup model manager callback
+        self.model_manager.set_progress_callback(self.on_model_download_progress)
 
     def setup_ui(self):
         """Setup the user interface"""
@@ -274,6 +283,10 @@ class GPUClientApp(QMainWindow):
         # Dashboard tab
         dashboard = self.create_dashboard_tab()
         tabs.addTab(dashboard, '🖥️ Dashboard')
+
+        # Models tab - NEW
+        models_tab = self.create_models_tab()
+        tabs.addTab(models_tab, '🤖 Models')
 
         # Settings tab
         settings = self.create_settings_tab()
@@ -554,6 +567,488 @@ class GPUClientApp(QMainWindow):
 
         return tab
 
+    def create_models_tab(self) -> QWidget:
+        """Create models management tab with sci-fi toggle switches"""
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+
+        # Info section with sci-fi styling
+        info_group = QGroupBox('🚀 AI Models Control Panel')
+        info_layout = QVBoxLayout()
+
+        info_text = QLabel(
+            '⚡ ดาวน์โหลดโมเดล AI ไว้ล่วงหน้าเพื่อรับงานได้เร็วขึ้น\n'
+            '🎯 เปิด/ปิดสวิตช์เพื่อเลือกโมเดลที่ต้องการรับงาน'
+        )
+        info_text.setStyleSheet('color: #888; font-size: 12px;')
+        info_text.setWordWrap(True)
+        info_layout.addWidget(info_text)
+
+        # Stats bar
+        stats_layout = QHBoxLayout()
+        self.models_count_label = QLabel('0 models')
+        self.models_count_label.setStyleSheet('font-size: 14px; font-weight: bold; color: #22c55e;')
+        stats_layout.addWidget(QLabel('🤖 Installed:'))
+        stats_layout.addWidget(self.models_count_label)
+        stats_layout.addStretch()
+        self.models_active_label = QLabel('0 active')
+        self.models_active_label.setStyleSheet('font-size: 14px; font-weight: bold; color: #3b82f6;')
+        stats_layout.addWidget(QLabel('⚡ Active:'))
+        stats_layout.addWidget(self.models_active_label)
+        stats_layout.addStretch()
+        self.models_size_label = QLabel('0 MB')
+        self.models_size_label.setStyleSheet('font-size: 14px; color: #888;')
+        stats_layout.addWidget(QLabel('💾 Size:'))
+        stats_layout.addWidget(self.models_size_label)
+        info_layout.addLayout(stats_layout)
+        info_group.setLayout(info_layout)
+        layout.addWidget(info_group)
+
+        # Refresh button row
+        btn_layout = QHBoxLayout()
+        refresh_models_btn = QPushButton('🔄 Refresh Models')
+        refresh_models_btn.clicked.connect(self.refresh_available_models)
+        btn_layout.addWidget(refresh_models_btn)
+        btn_layout.addStretch()
+        layout.addLayout(btn_layout)
+
+        # Scroll area for model cards
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setStyleSheet('''
+            QScrollArea {
+                background-color: transparent;
+                border: none;
+            }
+            QScrollBar:vertical {
+                background: rgba(15, 52, 96, 0.5);
+                width: 12px;
+                border-radius: 6px;
+            }
+            QScrollBar::handle:vertical {
+                background: #7c3aed;
+                border-radius: 6px;
+                min-height: 30px;
+            }
+        ''')
+
+        # Container for model cards
+        self.models_container = QWidget()
+        self.models_layout = QVBoxLayout(self.models_container)
+        self.models_layout.setSpacing(10)
+
+        # Add placeholder message
+        self.models_placeholder = QLabel(
+            '🔄 กดปุ่ม "Refresh Models" เพื่อโหลดรายการโมเดล\n\n'
+            '💡 หรือรอให้ระบบโหลดอัตโนมัติหลัง Login'
+        )
+        self.models_placeholder.setStyleSheet('''
+            color: #888;
+            font-size: 14px;
+            padding: 40px;
+        ''')
+        self.models_placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.models_layout.addWidget(self.models_placeholder)
+
+        scroll_area.setWidget(self.models_container)
+        layout.addWidget(scroll_area)
+
+        # Download progress section
+        progress_group = QGroupBox('📥 Download Progress')
+        progress_layout = QVBoxLayout()
+
+        self.model_download_progress = QProgressBar()
+        self.model_download_progress.setRange(0, 100)
+        self.model_download_progress.setValue(0)
+        self.model_download_progress.setStyleSheet('''
+            QProgressBar {
+                border: 2px solid #4a4a6a;
+                border-radius: 10px;
+                background-color: rgba(15, 52, 96, 0.8);
+                text-align: center;
+                height: 30px;
+                font-weight: bold;
+            }
+            QProgressBar::chunk {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #22c55e, stop:1 #3b82f6);
+                border-radius: 8px;
+            }
+        ''')
+        progress_layout.addWidget(self.model_download_progress)
+
+        self.model_download_status = QLabel('Ready to download')
+        self.model_download_status.setStyleSheet('color: #888; font-size: 12px;')
+        self.model_download_status.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        progress_layout.addWidget(self.model_download_status)
+
+        progress_group.setLayout(progress_layout)
+        layout.addWidget(progress_group)
+
+        # Store model widgets for updates
+        self.model_cards = {}
+        self.model_toggles = {}
+        self.model_enabled = {}  # Track which models are enabled for work
+
+        return tab
+
+    def create_model_card(self, model: Dict, is_installed: bool) -> QFrame:
+        """Create a sci-fi styled model card with toggle switch"""
+        model_id = model.get('model_id', model.get('name', 'unknown'))
+
+        card = QFrame()
+        card.setStyleSheet('''
+            QFrame {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                    stop:0 rgba(22, 33, 62, 0.9), stop:1 rgba(15, 52, 96, 0.9));
+                border: 2px solid #4a4a6a;
+                border-radius: 15px;
+                padding: 5px;
+            }
+            QFrame:hover {
+                border-color: #7c3aed;
+            }
+        ''')
+        card_layout = QHBoxLayout(card)
+        card_layout.setContentsMargins(15, 12, 15, 12)
+
+        # Left section - Model info
+        info_layout = QVBoxLayout()
+
+        # Model name with icon
+        name_layout = QHBoxLayout()
+        icon_label = QLabel('🤖' if is_installed else '📦')
+        icon_label.setStyleSheet('font-size: 24px;')
+        name_layout.addWidget(icon_label)
+
+        name_label = QLabel(model.get('name', model_id))
+        name_label.setStyleSheet('font-size: 14px; font-weight: bold; color: #fff;')
+        name_layout.addWidget(name_label)
+        name_layout.addStretch()
+        info_layout.addLayout(name_layout)
+
+        # Model details
+        vram_gb = model.get('vram_required_mb', 0) / 1024
+        size_gb = model.get('size_mb', 0) / 1024
+        category = model.get('category', 'unknown')
+
+        details_label = QLabel(f'💾 {size_gb:.1f}GB  |  🎮 VRAM: {vram_gb:.1f}GB  |  📂 {category}')
+        details_label.setStyleSheet('font-size: 11px; color: #888;')
+        info_layout.addWidget(details_label)
+
+        card_layout.addLayout(info_layout, stretch=1)
+
+        # Right section - Toggle/Download button
+        control_layout = QVBoxLayout()
+        control_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        if is_installed:
+            # Sci-fi toggle switch for installed models
+            toggle_container = QFrame()
+            toggle_container.setStyleSheet('''
+                QFrame {
+                    background: transparent;
+                    border: none;
+                }
+            ''')
+            toggle_layout = QVBoxLayout(toggle_container)
+            toggle_layout.setContentsMargins(0, 0, 0, 0)
+            toggle_layout.setSpacing(3)
+
+            # Toggle button (styled like spaceship switch)
+            toggle_btn = QPushButton()
+            toggle_btn.setCheckable(True)
+            toggle_btn.setChecked(self.model_enabled.get(model_id, True))
+            toggle_btn.setFixedSize(70, 36)
+            toggle_btn.setStyleSheet('''
+                QPushButton {
+                    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                        stop:0 #1a1a2e, stop:0.5 #16213e, stop:1 #0f3460);
+                    border: 3px solid #dc2626;
+                    border-radius: 18px;
+                    color: #dc2626;
+                    font-weight: bold;
+                    font-size: 10px;
+                }
+                QPushButton:checked {
+                    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                        stop:0 #064e3b, stop:0.5 #065f46, stop:1 #047857);
+                    border: 3px solid #22c55e;
+                    color: #22c55e;
+                }
+                QPushButton:hover {
+                    border-width: 4px;
+                }
+            ''')
+            toggle_btn.setText('OFF' if not toggle_btn.isChecked() else 'ON')
+            toggle_btn.clicked.connect(lambda checked, mid=model_id, btn=toggle_btn: self.toggle_model(mid, checked, btn))
+            toggle_layout.addWidget(toggle_btn, alignment=Qt.AlignmentFlag.AlignCenter)
+
+            # Status indicator lights
+            lights_layout = QHBoxLayout()
+            lights_layout.setSpacing(4)
+            for i in range(3):
+                light = QLabel('●')
+                if toggle_btn.isChecked():
+                    light.setStyleSheet(f'color: #22c55e; font-size: 8px;')
+                else:
+                    light.setStyleSheet('color: #4a4a4a; font-size: 8px;')
+                lights_layout.addWidget(light)
+            toggle_layout.addLayout(lights_layout)
+
+            # Store toggle reference
+            self.model_toggles[model_id] = toggle_btn
+
+            control_layout.addWidget(toggle_container)
+
+            # Delete button (small)
+            delete_btn = QPushButton('🗑️')
+            delete_btn.setFixedSize(30, 30)
+            delete_btn.setStyleSheet('''
+                QPushButton {
+                    background: rgba(220, 38, 38, 0.3);
+                    border: 1px solid #dc2626;
+                    border-radius: 5px;
+                    font-size: 12px;
+                }
+                QPushButton:hover {
+                    background: rgba(220, 38, 38, 0.6);
+                }
+            ''')
+            delete_btn.clicked.connect(lambda _, mid=model_id: self.delete_model_by_id(mid))
+            control_layout.addWidget(delete_btn, alignment=Qt.AlignmentFlag.AlignCenter)
+
+        else:
+            # Download button for non-installed models
+            download_btn = QPushButton('⬇️ DOWNLOAD')
+            download_btn.setFixedSize(100, 40)
+            download_btn.setStyleSheet('''
+                QPushButton {
+                    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                        stop:0 #3b82f6, stop:1 #1d4ed8);
+                    border: 2px solid #60a5fa;
+                    border-radius: 10px;
+                    color: white;
+                    font-weight: bold;
+                    font-size: 10px;
+                }
+                QPushButton:hover {
+                    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                        stop:0 #60a5fa, stop:1 #3b82f6);
+                    border-color: #93c5fd;
+                }
+                QPushButton:pressed {
+                    background: #1e40af;
+                }
+            ''')
+            download_btn.clicked.connect(lambda _, m=model: self.download_model_from_card(m))
+            control_layout.addWidget(download_btn)
+
+        card_layout.addLayout(control_layout)
+
+        return card
+
+    def toggle_model(self, model_id: str, enabled: bool, btn: QPushButton):
+        """Toggle model enabled/disabled for work"""
+        self.model_enabled[model_id] = enabled
+        btn.setText('ON' if enabled else 'OFF')
+
+        # Update indicator lights
+        toggle_container = btn.parent()
+        if toggle_container:
+            lights = toggle_container.findChildren(QLabel)
+            for light in lights:
+                if light.text() == '●':
+                    light.setStyleSheet(f'color: {"#22c55e" if enabled else "#4a4a4a"}; font-size: 8px;')
+
+        # Notify server about model status
+        if self.node_id:
+            try:
+                self.api.update_model_status(self.node_id, model_id, enabled)
+                self.append_log(f'Model {model_id}: {"ENABLED" if enabled else "DISABLED"}')
+            except Exception as e:
+                self.append_log(f'Warning: Failed to update model status: {e}')
+
+        self.update_active_count()
+
+    def update_active_count(self):
+        """Update the active models count"""
+        active = sum(1 for v in self.model_enabled.values() if v)
+        self.models_active_label.setText(f'{active} active')
+
+    def download_model_from_card(self, model: Dict):
+        """Download model from card button click"""
+        model_id = model['model_id']
+        huggingface_id = model['huggingface_id']
+        category = model.get('category', 'stable-diffusion').replace('_', '-')
+
+        self.append_log(f'Starting download: {model_id}')
+        self.model_download_status.setText(f'⏳ Downloading {model_id}...')
+        self.model_download_progress.setValue(0)
+
+        success = self.model_manager.download_model(
+            model_id=model_id,
+            huggingface_id=huggingface_id,
+            category=category,
+        )
+
+        if not success:
+            self.show_error('Failed to start download')
+
+    def delete_model_by_id(self, model_id: str):
+        """Delete model by ID"""
+        reply = QMessageBox.question(
+            self,
+            'Delete Model',
+            f'⚠️ Are you sure you want to delete {model_id}?',
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+
+        if reply == QMessageBox.StandardButton.Yes:
+            if self.model_manager.delete_model(model_id):
+                self.append_log(f'Model {model_id} deleted')
+                if model_id in self.model_enabled:
+                    del self.model_enabled[model_id]
+                if model_id in self.model_toggles:
+                    del self.model_toggles[model_id]
+                self.refresh_installed_models()
+                self.rebuild_model_cards()
+
+                if self.node_id:
+                    try:
+                        self.api.unregister_model(self.node_id, model_id)
+                    except:
+                        pass
+            else:
+                self.show_error(f'Failed to delete {model_id}')
+
+    def rebuild_model_cards(self):
+        """Rebuild all model cards"""
+        # Clear existing cards
+        while self.models_layout.count():
+            item = self.models_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+
+        self.model_cards.clear()
+
+        installed_ids = self.model_manager.get_installed_model_list()
+
+        # Check if we have any models to show
+        has_models = len(installed_ids) > 0 or len(self.available_models) > 0
+
+        if not has_models:
+            # Show placeholder if no models
+            placeholder = QLabel(
+                '🔄 กดปุ่ม "Refresh Models" เพื่อโหลดรายการโมเดล\n\n'
+                '💡 หรือรอให้ระบบโหลดอัตโนมัติหลัง Login'
+            )
+            placeholder.setStyleSheet('''
+                color: #888;
+                font-size: 14px;
+                padding: 40px;
+            ''')
+            placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            self.models_layout.addWidget(placeholder)
+            self.models_layout.addStretch()
+            return
+
+        # Add installed models first (with toggle switches)
+        for model_id in installed_ids:
+            model_info = {'model_id': model_id, 'name': model_id, 'category': 'installed', 'size_mb': 0, 'vram_required_mb': 0}
+            # Find full model info if available
+            for m in self.available_models:
+                if m.get('model_id') == model_id:
+                    model_info = m
+                    break
+            card = self.create_model_card(model_info, is_installed=True)
+            self.model_cards[model_id] = card
+            self.models_layout.addWidget(card)
+
+        # Add available models (with download buttons)
+        for model in self.available_models:
+            model_id = model.get('model_id')
+            if model_id and model_id not in installed_ids:
+                card = self.create_model_card(model, is_installed=False)
+                self.model_cards[model_id] = card
+                self.models_layout.addWidget(card)
+
+        # Add stretch at end
+        self.models_layout.addStretch()
+
+        self.update_active_count()
+
+    def refresh_installed_models(self):
+        """Refresh the installed models info"""
+        summary = self.model_manager.get_models_summary()
+
+        # Set enabled state for all installed models
+        for model in summary['models']:
+            if model['model_id'] not in self.model_enabled:
+                self.model_enabled[model['model_id']] = True  # Default to enabled
+
+        self.models_count_label.setText(f"{summary['total_models']} models")
+        self.models_size_label.setText(f"{summary['total_size_mb']:.0f} MB")
+        self.update_active_count()
+
+    def refresh_available_models(self):
+        """Fetch available models from server"""
+        if not self.node_id:
+            self.show_error('Please login and register node first')
+            return
+
+        self.append_log('Fetching available models...')
+
+        def fetch():
+            try:
+                result = self.api.get_available_models(self.node_id)
+                if result.get('success'):
+                    self.available_models = result['data']['models']
+                    self.signals.models_updated.emit()
+                    self.signals.log_message.emit(f"Found {len(self.available_models)} available models")
+            except APIError as e:
+                self.signals.error.emit(f'Failed to fetch models: {e.message}')
+
+        threading.Thread(target=fetch, daemon=True).start()
+
+    def update_available_models_list(self):
+        """Update the model cards"""
+        self.rebuild_model_cards()
+
+    def download_selected_model(self):
+        """Legacy method - now handled by download_model_from_card"""
+        pass
+
+    def on_model_download_progress(self, model_id: str, status: str, progress: int, error: str):
+        """Handle model download progress updates"""
+        self.signals.model_download_progress.emit(model_id, status, progress, error or '')
+
+    def handle_model_download_progress(self, model_id: str, status: str, progress: int, error: str):
+        """Update UI for download progress"""
+        self.model_download_progress.setValue(progress)
+        self.model_download_status.setText(f'{status}: {model_id} ({progress}%)')
+
+        if status == 'completed':
+            self.model_download_progress.setValue(100)
+            self.model_download_status.setText(f'✅ {model_id} installed successfully!')
+            self.refresh_installed_models()
+            self.rebuild_model_cards()
+
+            # Register with server
+            if self.node_id:
+                try:
+                    self.api.register_model_installed(self.node_id, model_id)
+                    self.append_log(f'Model {model_id} registered with server')
+                except Exception as e:
+                    self.append_log(f'Warning: Failed to register model with server: {e}')
+
+        elif status == 'failed':
+            self.model_download_progress.setValue(0)
+            self.model_download_status.setText(f'❌ Download failed: {error}')
+
+    def delete_selected_model(self):
+        """Legacy method - now handled by delete_model_by_id"""
+        pass
+
     def setup_signals(self):
         """Connect signals to slots"""
         self.signals.log_message.connect(self.append_log)
@@ -562,6 +1057,8 @@ class GPUClientApp(QMainWindow):
         self.signals.earnings_update.connect(self.update_earnings_display)
         self.signals.error.connect(self.show_error)
         self.signals.connection_status.connect(self.update_connection_status)
+        self.signals.model_download_progress.connect(self.handle_model_download_progress)
+        self.signals.models_updated.connect(self.update_available_models_list)
 
     def setup_timers(self):
         """Setup background timers"""
@@ -707,6 +1204,8 @@ class GPUClientApp(QMainWindow):
         self.append_log('Logged in successfully')
         self.register_node()
         self.check_connection()
+        # Load installed models
+        self.refresh_installed_models()
 
     def on_logout(self):
         """Handle logout"""
@@ -735,6 +1234,9 @@ class GPUClientApp(QMainWindow):
 
                 if result['data'].get('benchmark_required'):
                     self.append_log('Benchmark required - please run benchmark')
+
+                # Auto-load available models after node registration
+                self.refresh_available_models()
 
         except APIError as e:
             self.show_error(f'Node registration failed: {e.message}')
@@ -936,17 +1438,37 @@ class GPUClientApp(QMainWindow):
                 )
                 self.worker.set_power_limit(self.gpu_power_limit)
 
+                # Pass complete chunk data including generation parameters
                 result = self.worker.process_job({
                     'chunk_id': chunk_id,
                     'job_type': chunk.get('job_type', 'image'),
+                    'generation': chunk.get('generation', {}),  # Pass generation params
                     'params': chunk.get('params', {}),
+                    'job_params': chunk.get('job_params', {}),
                 })
 
                 if result['success']:
+                    # If we have a generated file, upload it first
+                    partial_result_url = None
+                    if result.get('result_file') and os.path.exists(result['result_file']):
+                        try:
+                            upload_result = self.api.upload_partial_result(
+                                self.node_id,
+                                chunk_id,
+                                result['result_file']
+                            )
+                            if upload_result.get('success'):
+                                partial_result_url = upload_result['data']['url']
+                                self.signals.log_message.emit(f'Uploaded result: {partial_result_url}')
+                        except Exception as e:
+                            self.signals.log_message.emit(f'Upload warning: {e}')
+
                     self.api.submit_work(
                         self.node_id,
                         chunk_id,
                         result['result_hash'],
+                        result_file=result.get('result_file'),
+                        partial_result_url=partial_result_url,
                         metadata=result.get('metadata')
                     )
                     self.signals.log_message.emit(f'Work completed: {chunk_id}')

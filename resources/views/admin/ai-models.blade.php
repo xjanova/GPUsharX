@@ -177,9 +177,14 @@
                         </button>
                     </td>
                     <td class="px-4 py-4 text-center">
-                        <a href="{{ route('models.show', $model->model_id) }}" target="_blank" class="text-gray-400 hover:text-white transition" title="View">
-                            <i class="fas fa-external-link-alt"></i>
-                        </a>
+                        <div class="flex items-center justify-center gap-2">
+                            <a href="{{ route('admin.ai-models.edit', $model) }}" class="text-blue-400 hover:text-blue-300 transition" title="Edit">
+                                <i class="fas fa-edit"></i>
+                            </a>
+                            <a href="{{ route('models.show', $model->model_id) }}" target="_blank" class="text-gray-400 hover:text-white transition" title="View">
+                                <i class="fas fa-external-link-alt"></i>
+                            </a>
+                        </div>
                     </td>
                 </tr>
                 @empty

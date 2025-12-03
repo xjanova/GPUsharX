@@ -22,3 +22,8 @@
 Homestead.json
 Homestead.yaml
 Thumbs.db
+.vs/
+*.vsidx
+bin/
+obj/
+client-windows/GPUShareClient.vcxproj.user

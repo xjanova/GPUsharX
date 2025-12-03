@@ -73,6 +73,7 @@
                     <th class="text-left px-6 py-4 text-sm text-gray-400">Credits</th>
                     <th class="text-left px-6 py-4 text-sm text-gray-400">Status</th>
                     <th class="text-left px-6 py-4 text-sm text-gray-400">Created</th>
+                    <th class="text-left px-6 py-4 text-sm text-gray-400">Actions</th>
                 </tr>
             </thead>
             <tbody class="divide-y divide-gray-700">
@@ -112,10 +113,36 @@
                         </span>
                     </td>
                     <td class="px-6 py-4 text-sm text-gray-400">{{ $job->created_at->diffForHumans() }}</td>
+                    <td class="px-6 py-4">
+                        <div class="flex gap-2">
+                            @if(!in_array($job->status, ['completed', 'cancelled']))
+                            <form action="{{ route('admin.jobs.cancel', $job) }}" method="POST" class="inline" onsubmit="return confirm('ยืนยันยกเลิกงานและคืนเครดิต?')">
+                                @csrf
+                                <button type="submit" class="text-yellow-400 hover:text-yellow-300 text-sm" title="ยกเลิกและคืนเครดิต">
+                                    <i class="fas fa-ban"></i>
+                                </button>
+                            </form>
+                            <form action="{{ route('admin.jobs.force-fail', $job) }}" method="POST" class="inline" onsubmit="return confirm('ยืนยัน force fail งานและคืนเครดิต?')">
+                                @csrf
+                                <button type="submit" class="text-red-400 hover:text-red-300 text-sm" title="Force Fail และคืนเครดิต">
+                                    <i class="fas fa-times-circle"></i>
+                                </button>
+                            </form>
+                            @endif
+                            @if(in_array($job->status, ['failed', 'cancelled']))
+                            <form action="{{ route('admin.jobs.retry', $job) }}" method="POST" class="inline" onsubmit="return confirm('ยืนยัน retry งาน?')">
+                                @csrf
+                                <button type="submit" class="text-green-400 hover:text-green-300 text-sm" title="Retry งาน">
+                                    <i class="fas fa-redo"></i>
+                                </button>
+                            </form>
+                            @endif
+                        </div>
+                    </td>
                 </tr>
                 @empty
                 <tr>
-                    <td colspan="8" class="px-6 py-12 text-center text-gray-500">No jobs found</td>
+                    <td colspan="9" class="px-6 py-12 text-center text-gray-500">No jobs found</td>
                 </tr>
                 @endforelse
             </tbody>

@@ -4,15 +4,15 @@
  * Copyright (c) 2024 Xman Studio Thailand
  */
 
-#include <windows.h>
-#include <winhttp.h>
-#include <wincrypt.h>
-#include <stdio.h>
-#include <string.h>
-#include <stdlib.h>
+// Include common header first (handles winsock2/windows order)
+#include "../include/common.h"
 #include "../include/config.h"
 #include "../include/types.h"
 #include "../include/api.h"
+
+// Additional headers for HTTP communication
+#include <winhttp.h>
+#include <wincrypt.h>
 
 #pragma comment(lib, "winhttp.lib")
 #pragma comment(lib, "crypt32.lib")
@@ -110,6 +110,18 @@ typedef struct {
 static bool HTTP_Request(HttpRequest* req) {
     HINTERNET hSession = NULL, hConnect = NULL, hRequest = NULL;
     bool success = false;
+    DWORD timeout = API_TIMEOUT;
+    DWORD flags = 0;
+    DWORD body_len = 0;
+    DWORD bytes_read = 0;
+    DWORD total_read = 0;
+    wchar_t whost[256];
+    char full_path[1024];
+    wchar_t wpath[1024];
+    wchar_t wmethod[16];
+    wchar_t version_header[128];
+    wchar_t auth_header[1024];
+    char buffer[4096];
 
     // Initialize response
     if (req->response && req->response_size > 0) {
@@ -125,29 +137,23 @@ static bool HTTP_Request(HttpRequest* req) {
     if (!hSession) goto cleanup;
 
     // Set timeouts
-    DWORD timeout = API_TIMEOUT;
+    timeout = API_TIMEOUT;
     WinHttpSetOption(hSession, WINHTTP_OPTION_CONNECT_TIMEOUT, &timeout, sizeof(timeout));
     WinHttpSetOption(hSession, WINHTTP_OPTION_RECEIVE_TIMEOUT, &timeout, sizeof(timeout));
 
     // Connect to server
-    wchar_t whost[256];
     MultiByteToWideChar(CP_UTF8, 0, API_HOST, -1, whost, 256);
 
     hConnect = WinHttpConnect(hSession, whost, API_PORT, 0);
     if (!hConnect) goto cleanup;
 
     // Build full path
-    char full_path[1024];
     snprintf(full_path, sizeof(full_path), "%s%s", API_BASE_PATH, req->path);
-
-    wchar_t wpath[1024];
     MultiByteToWideChar(CP_UTF8, 0, full_path, -1, wpath, 1024);
-
-    wchar_t wmethod[16];
     MultiByteToWideChar(CP_UTF8, 0, req->method, -1, wmethod, 16);
 
     // Open request
-    DWORD flags = API_USE_HTTPS ? WINHTTP_FLAG_SECURE : 0;
+    flags = API_USE_HTTPS ? WINHTTP_FLAG_SECURE : 0;
     hRequest = WinHttpOpenRequest(hConnect, wmethod, wpath,
                                   NULL, WINHTTP_NO_REFERER,
                                   WINHTTP_DEFAULT_ACCEPT_TYPES, flags);
@@ -158,19 +164,17 @@ static bool HTTP_Request(HttpRequest* req) {
     WinHttpAddRequestHeaders(hRequest, L"Accept: application/json", -1, WINHTTP_ADDREQ_FLAG_ADD);
 
     // Add client version header
-    wchar_t version_header[128];
     swprintf(version_header, 128, L"X-Client-Version: %hs", APP_VERSION);
     WinHttpAddRequestHeaders(hRequest, version_header, -1, WINHTTP_ADDREQ_FLAG_ADD);
 
     // Add authorization header if token provided
     if (req->token && strlen(req->token) > 0) {
-        wchar_t auth_header[1024];
         swprintf(auth_header, 1024, L"Authorization: Bearer %hs", req->token);
         WinHttpAddRequestHeaders(hRequest, auth_header, -1, WINHTTP_ADDREQ_FLAG_ADD);
     }
 
     // Send request
-    DWORD body_len = req->body ? (DWORD)strlen(req->body) : 0;
+    body_len = req->body ? (DWORD)strlen(req->body) : 0;
     if (!WinHttpSendRequest(hRequest, WINHTTP_NO_ADDITIONAL_HEADERS, 0,
                            (LPVOID)req->body, body_len, body_len, 0)) {
         goto cleanup;
@@ -190,10 +194,6 @@ static bool HTTP_Request(HttpRequest* req) {
     }
 
     // Read response
-    DWORD bytes_read = 0;
-    DWORD total_read = 0;
-    char buffer[4096];
-
     while (WinHttpReadData(hRequest, buffer, sizeof(buffer) - 1, &bytes_read) && bytes_read > 0) {
         buffer[bytes_read] = '\0';
         if (total_read + bytes_read < req->response_size) {
@@ -757,6 +757,105 @@ bool API_GetEarningsSummary(const char* token, EarningsSummary* summary) {
     }
 
     return true;
+}
+
+// ============ Model Management API ============
+
+bool API_GetAvailableModels(const char* token, const char* node_id, int gpu_vram_mb,
+                            ModelData* models, int* model_count, int max_models) {
+    char response[16384] = {0};
+    char path[256];
+    int http_code = 0;
+
+    snprintf(path, sizeof(path), "/models/available?node_id=%s&vram_mb=%d", node_id, gpu_vram_mb);
+
+    HttpRequest req = {
+        .method = "GET",
+        .path = path,
+        .token = token,
+        .body = NULL,
+        .response = response,
+        .response_size = sizeof(response),
+        .http_code = &http_code
+    };
+
+    if (!HTTP_Request(&req)) return false;
+    if (!json_get_bool(response, "success")) return false;
+
+    const char* data = json_find_object(response, "data");
+    if (!data) return false;
+
+    const char* models_array = json_find_array(data, "models");
+    if (!models_array) return false;
+
+    *model_count = 0;
+    const char* model = models_array;
+
+    // Parse JSON array of models
+    while ((model = strchr(model, '{')) != NULL && *model_count < max_models) {
+        const char* model_end = strchr(model, '}');
+        if (!model_end) break;
+
+        // Extract model data
+        json_get_string(model, "model_id", models[*model_count].model_id, sizeof(models[*model_count].model_id));
+        json_get_string(model, "name", models[*model_count].name, sizeof(models[*model_count].name));
+        json_get_string(model, "category", models[*model_count].category, sizeof(models[*model_count].category));
+        models[*model_count].vram_required_mb = json_get_int(model, "vram_required_mb");
+        models[*model_count].size_mb = json_get_int(model, "size_mb");
+        models[*model_count].is_installed = json_get_bool(model, "is_installed");
+        models[*model_count].is_enabled = json_get_bool(model, "is_enabled");
+
+        (*model_count)++;
+        model = model_end + 1;
+    }
+
+    return true;
+}
+
+bool API_UpdateInstalledModels(const char* token, const char* node_id,
+                                const char* model_ids_json) {
+    char body[4096];
+    char response[1024] = {0};
+    int http_code = 0;
+
+    snprintf(body, sizeof(body),
+            "{\"node_id\":\"%s\",\"installed_models\":%s}",
+            node_id, model_ids_json);
+
+    HttpRequest req = {
+        .method = "POST",
+        .path = "/models/installed",
+        .token = token,
+        .body = body,
+        .response = response,
+        .response_size = sizeof(response),
+        .http_code = &http_code
+    };
+
+    return HTTP_Request(&req) && json_get_bool(response, "success");
+}
+
+bool API_UpdateModelStatus(const char* token, const char* node_id,
+                           const char* model_id, bool enabled) {
+    char body[512];
+    char response[1024] = {0};
+    int http_code = 0;
+
+    snprintf(body, sizeof(body),
+            "{\"node_id\":\"%s\",\"model_id\":\"%s\",\"enabled\":%s}",
+            node_id, model_id, enabled ? "true" : "false");
+
+    HttpRequest req = {
+        .method = "POST",
+        .path = "/models/status",
+        .token = token,
+        .body = body,
+        .response = response,
+        .response_size = sizeof(response),
+        .http_code = &http_code
+    };
+
+    return HTTP_Request(&req) && json_get_bool(response, "success");
 }
 
 // ============ Utility ============

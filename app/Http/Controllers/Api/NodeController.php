@@ -29,12 +29,12 @@ class NodeController extends Controller
 
         $user = $request->user();
 
-        // Anti-cheat validation
+        // Anti-cheat validation (pass user ID to allow reconnection)
         $validation = $this->antiCheatService->validateNodeRegistration([
             'machine_id' => $validated['machine_id'],
             'gpu_vram_mb' => $validated['gpu_vram_mb'],
             'gpu_specs' => $validated['gpu_specs'] ?? [],
-        ]);
+        ], $user->id);
 
         if (!$validation['valid']) {
             return response()->json([

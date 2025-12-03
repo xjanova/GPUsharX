@@ -3,15 +3,19 @@
  * CPU, RAM, and Network monitoring
  */
 
-#include <windows.h>
-#include <psapi.h>
-#include <iphlpapi.h>
-#include <stdio.h>
+// Include common header first (handles winsock2/windows order)
+#include "../include/common.h"
 #include "../include/types.h"
 #include "../include/config.h"
 
+// Additional headers for network monitoring
+#include <psapi.h>
+#include <iphlpapi.h>
+#include <netioapi.h>
+
 #pragma comment(lib, "psapi.lib")
 #pragma comment(lib, "iphlpapi.lib")
+#pragma comment(lib, "ws2_32.lib")
 
 // Previous network stats for speed calculation
 static uint64_t prev_bytes_sent = 0;

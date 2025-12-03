@@ -30,11 +30,17 @@ class GenerationJob extends Model
         'error_message',
         'visibility',
         'likes',
+        'refunded_at',
+        'refunded_amount',
+        'is_admin_test',
+        'created_by',
     ];
 
     protected $casts = [
         'params' => 'array',
         'result_metadata' => 'array',
+        'refunded_at' => 'datetime',
+        'refunded_amount' => 'decimal:2',
     ];
 
     protected static function boot()

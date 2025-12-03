@@ -21,12 +21,23 @@ class User extends Authenticatable
         'referral_code',
         'referred_by',
         'balance',
+        'credits',
         'total_earned',
         'total_withdrawn',
         'pending_earnings',
         'status',
         'payment_info',
         'last_activity',
+        // Google OAuth
+        'google_id',
+        'google_email',
+        'google_access_token',
+        'google_refresh_token',
+        'google_token_expires_at',
+        'google_drive_folder_id',
+        // KYC
+        'kyc_status',
+        'withdrawal_limit',
     ];
 
     protected $hidden = [
@@ -40,12 +51,27 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'balance' => 'decimal:8',
+            'credits' => 'decimal:2',
             'total_earned' => 'decimal:8',
             'total_withdrawn' => 'decimal:8',
             'pending_earnings' => 'decimal:8',
             'payment_info' => 'array',
             'last_activity' => 'datetime',
+            'google_token_expires_at' => 'datetime',
         ];
+    }
+
+    /**
+     * Check if Google Drive is connected and token is valid
+     */
+    public function getGoogleDriveConnectedAttribute(): bool
+    {
+        if (!$this->google_access_token || !$this->google_refresh_token) {
+            return false;
+        }
+
+        // Token ยังไม่หมดอายุ หรือมี refresh token
+        return $this->google_refresh_token !== null;
     }
 
     protected static function boot()
@@ -104,6 +130,39 @@ class User extends Authenticatable
         return $this->hasMany(RenderJob::class, 'created_by');
     }
 
+    public function generationJobs(): HasMany
+    {
+        return $this->hasMany(GenerationJob::class);
+    }
+
+    public function subscriptions(): HasMany
+    {
+        return $this->hasMany(UserSubscription::class);
+    }
+
+    public function activeSubscription()
+    {
+        return $this->hasOne(UserSubscription::class)
+            ->where('status', 'active')
+            ->where('expires_at', '>', now())
+            ->latest();
+    }
+
+    public function creditPurchases(): HasMany
+    {
+        return $this->hasMany(CreditPurchase::class);
+    }
+
+    public function kycVerification()
+    {
+        return $this->hasOne(KycVerification::class)->latest();
+    }
+
+    public function kycVerifications(): HasMany
+    {
+        return $this->hasMany(KycVerification::class);
+    }
+
     public function isAdmin(): bool
     {
         return $this->role === 'admin';
@@ -132,5 +191,31 @@ class User extends Authenticatable
     public function updateActivity(): void
     {
         $this->update(['last_activity' => now()]);
+    }
+
+    public function isKycApproved(): bool
+    {
+        return $this->kyc_status === 'approved';
+    }
+
+    public function isKycPending(): bool
+    {
+        return $this->kyc_status === 'pending';
+    }
+
+    public function canWithdraw(): bool
+    {
+        return $this->isActive() && $this->isKycApproved();
+    }
+
+    public function getKycStatusLabelAttribute(): string
+    {
+        return match($this->kyc_status) {
+            'none' => 'ยังไม่ได้ยืนยัน',
+            'pending' => 'รอตรวจสอบ',
+            'approved' => 'ยืนยันแล้ว',
+            'rejected' => 'ไม่ผ่านการยืนยัน',
+            default => 'ไม่ทราบ',
+        };
     }
 }

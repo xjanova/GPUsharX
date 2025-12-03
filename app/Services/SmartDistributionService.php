@@ -221,13 +221,13 @@ class SmartDistributionService
 
     /**
      * ดึง available nodes พร้อม filter
+     *
+     * Note: ไม่เช็ค VRAM เพราะระบบมีการแบ่งงาน (chunking) ที่จัดการให้เหมาะสม
+     * กับแต่ละ worker อยู่แล้ว
      */
     protected function getAvailableNodes(RenderJob $job): Collection
     {
-        $requiredVram = $job->required_vram_mb ?? 0;
-
         return GpuNode::availableForWork()
-            ->where('gpu_vram_mb', '>=', $requiredVram)
             ->where('is_verified', true)
             ->orderBy('performance_score', 'desc')
             ->orderBy('hashrate', 'desc')
@@ -381,11 +381,8 @@ class SmartDistributionService
      */
     protected function findBestSingleWorker(Collection $nodes, RenderJob $job): GpuNode
     {
-        $requiredVram = $job->required_vram_mb ?? 0;
-
         // เรียงตาม: 1. performance_score, 2. success_rate, 3. hashrate
         return $nodes
-            ->filter(fn($n) => $n->gpu_vram_mb >= $requiredVram)
             ->sortByDesc(function ($node) {
                 return (
                     ($node->performance_score ?? 0) * 0.5 +
@@ -423,13 +420,8 @@ class SmartDistributionService
      */
     protected function selectNodesForParallel(Collection $nodes, int $count, RenderJob $job): Collection
     {
-        $requiredVram = $job->required_vram_mb ?? 0;
-
-        // กรอง nodes ที่ผ่าน VRAM requirement
-        $eligible = $nodes->filter(fn($n) => $n->gpu_vram_mb >= $requiredVram);
-
-        // เรียงตาม combined score
-        $sorted = $eligible->sortByDesc(function ($node) {
+        // เรียงตาม combined score (ไม่เช็ค VRAM เพราะงานจะถูกแบ่งให้เหมาะสม)
+        $sorted = $nodes->sortByDesc(function ($node) {
             return (
                 ($node->performance_score ?? 50) * 0.4 +
                 ($node->hashrate ?? 0) / 100 * 0.3 +

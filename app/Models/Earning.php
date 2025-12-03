@@ -83,5 +83,24 @@ class Earning extends Model
         $this->user->decrement('pending_earnings', $this->net_amount);
         $this->user->increment('balance', $this->net_amount);
         $this->user->increment('total_earned', $this->net_amount);
+
+        // Distribute referral commissions to upline
+        $this->distributeReferralCommissions();
+    }
+
+    /**
+     * Distribute referral commissions to upline referrers
+     */
+    protected function distributeReferralCommissions(): void
+    {
+        try {
+            $referralService = app(\App\Services\ReferralService::class);
+            $referralService->distributeCommissions($this);
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error('Failed to distribute referral commissions', [
+                'earning_id' => $this->id,
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 }

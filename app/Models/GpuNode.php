@@ -40,10 +40,13 @@ class GpuNode extends Model
         'total_earnings',
         'total_uptime_hours',
         'last_evaluation_at',
+        // Model management
+        'installed_models',
     ];
 
     protected $casts = [
         'gpu_specs' => 'array',
+        'installed_models' => 'array',
         'last_heartbeat' => 'datetime',
         'last_benchmark' => 'datetime',
         'last_evaluation_at' => 'datetime',

@@ -34,6 +34,7 @@ class JobChunk extends Model
         'dependency_status',
         'workload_weight',
         'partial_result_url',
+        'required_vram_mb', // VRAM requirement for this specific chunk
     ];
 
     protected $casts = [

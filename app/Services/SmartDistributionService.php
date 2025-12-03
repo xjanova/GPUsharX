@@ -220,18 +220,60 @@ class SmartDistributionService
     }
 
     /**
-     * ดึง available nodes พร้อม filter
+     * ดึง available nodes พร้อม filter ตาม VRAM requirement
      *
-     * Note: ไม่เช็ค VRAM เพราะระบบมีการแบ่งงาน (chunking) ที่จัดการให้เหมาะสม
-     * กับแต่ละ worker อยู่แล้ว
+     * สำคัญ: ต้องเช็ค VRAM ของ node ให้พอสำหรับงาน
+     * - ถ้างานต้องการ VRAM > node มี → node นั้นทำไม่ได้
+     * - ถ้างานถูกแบ่ง (chunked) → แต่ละ chunk จะมี required_vram_mb ของตัวเอง
      */
     protected function getAvailableNodes(RenderJob $job): Collection
     {
-        return GpuNode::availableForWork()
-            ->where('is_verified', true)
+        $requiredVram = $job->required_vram_mb ?? 4000;
+        $modelId = $job->job_params['model_id'] ?? $job->model_id ?? null;
+
+        $query = GpuNode::availableForWork()
+            ->where('is_verified', true);
+
+        // Filter by VRAM - node ต้องมี VRAM พอสำหรับงาน
+        // แต่ถ้าเป็น admin test job ให้ข้ามการเช็ค
+        $isAdminTest = $job->job_params['is_admin_test'] ?? false;
+        if (!$isAdminTest) {
+            $query->where('gpu_vram_mb', '>=', $requiredVram);
+        }
+
+        // Filter by installed models (ถ้ามี model_id)
+        if ($modelId && !$isAdminTest) {
+            $query->where(function ($q) use ($modelId) {
+                // Node ต้องมี model ติดตั้ง หรือ installed_models เป็น null (accept all)
+                $q->whereNull('installed_models')
+                  ->orWhereJsonContains('installed_models', $modelId);
+            });
+        }
+
+        return $query
             ->orderBy('performance_score', 'desc')
             ->orderBy('hashrate', 'desc')
             ->get();
+    }
+
+    /**
+     * ดึง nodes ที่รองรับ VRAM ระดับต่างๆ (สำหรับ smart chunking)
+     */
+    protected function getNodesByVramTier(RenderJob $job): array
+    {
+        $allNodes = GpuNode::availableForWork()
+            ->where('is_verified', true)
+            ->orderBy('gpu_vram_mb', 'desc')
+            ->get();
+
+        return [
+            'tier_24gb' => $allNodes->filter(fn($n) => ($n->gpu_vram_mb ?? 0) >= 24000),
+            'tier_12gb' => $allNodes->filter(fn($n) => ($n->gpu_vram_mb ?? 0) >= 12000 && ($n->gpu_vram_mb ?? 0) < 24000),
+            'tier_8gb' => $allNodes->filter(fn($n) => ($n->gpu_vram_mb ?? 0) >= 8000 && ($n->gpu_vram_mb ?? 0) < 12000),
+            'tier_6gb' => $allNodes->filter(fn($n) => ($n->gpu_vram_mb ?? 0) >= 6000 && ($n->gpu_vram_mb ?? 0) < 8000),
+            'tier_4gb' => $allNodes->filter(fn($n) => ($n->gpu_vram_mb ?? 0) >= 4000 && ($n->gpu_vram_mb ?? 0) < 6000),
+            'tier_3gb' => $allNodes->filter(fn($n) => ($n->gpu_vram_mb ?? 0) >= 3000 && ($n->gpu_vram_mb ?? 0) < 4000),
+        ];
     }
 
     /**

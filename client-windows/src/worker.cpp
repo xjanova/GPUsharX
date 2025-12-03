@@ -4,14 +4,15 @@
  * Copyright (c) 2024 Xman Studio Thailand
  */
 
-#include <windows.h>
-#include <wincrypt.h>
-#include <stdio.h>
-#include <string.h>
+// Include common header first (handles winsock2/windows order)
+#include "../include/common.h"
 #include "../include/config.h"
 #include "../include/types.h"
 #include "../include/api.h"
 #include "../include/worker.h"
+
+// Additional headers for cryptography
+#include <wincrypt.h>
 
 #pragma comment(lib, "crypt32.lib")
 

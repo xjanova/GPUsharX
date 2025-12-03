@@ -7,7 +7,7 @@
 #ifndef API_H
 #define API_H
 
-#include <stdbool.h>
+// types.h includes common.h which includes stdbool.h
 #include "types.h"
 
 // API Response structure

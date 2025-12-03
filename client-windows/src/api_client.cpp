@@ -4,15 +4,15 @@
  * Copyright (c) 2024 Xman Studio Thailand
  */
 
-#include <windows.h>
-#include <winhttp.h>
-#include <wincrypt.h>
-#include <stdio.h>
-#include <string.h>
-#include <stdlib.h>
+// Include common header first (handles winsock2/windows order)
+#include "../include/common.h"
 #include "../include/config.h"
 #include "../include/types.h"
 #include "../include/api.h"
+
+// Additional headers for HTTP communication
+#include <winhttp.h>
+#include <wincrypt.h>
 
 #pragma comment(lib, "winhttp.lib")
 #pragma comment(lib, "crypt32.lib")
@@ -110,6 +110,18 @@ typedef struct {
 static bool HTTP_Request(HttpRequest* req) {
     HINTERNET hSession = NULL, hConnect = NULL, hRequest = NULL;
     bool success = false;
+    DWORD timeout = API_TIMEOUT;
+    DWORD flags = 0;
+    DWORD body_len = 0;
+    DWORD bytes_read = 0;
+    DWORD total_read = 0;
+    wchar_t whost[256];
+    char full_path[1024];
+    wchar_t wpath[1024];
+    wchar_t wmethod[16];
+    wchar_t version_header[128];
+    wchar_t auth_header[1024];
+    char buffer[4096];
 
     // Initialize response
     if (req->response && req->response_size > 0) {
@@ -125,29 +137,23 @@ static bool HTTP_Request(HttpRequest* req) {
     if (!hSession) goto cleanup;
 
     // Set timeouts
-    DWORD timeout = API_TIMEOUT;
+    timeout = API_TIMEOUT;
     WinHttpSetOption(hSession, WINHTTP_OPTION_CONNECT_TIMEOUT, &timeout, sizeof(timeout));
     WinHttpSetOption(hSession, WINHTTP_OPTION_RECEIVE_TIMEOUT, &timeout, sizeof(timeout));
 
     // Connect to server
-    wchar_t whost[256];
     MultiByteToWideChar(CP_UTF8, 0, API_HOST, -1, whost, 256);
 
     hConnect = WinHttpConnect(hSession, whost, API_PORT, 0);
     if (!hConnect) goto cleanup;
 
     // Build full path
-    char full_path[1024];
     snprintf(full_path, sizeof(full_path), "%s%s", API_BASE_PATH, req->path);
-
-    wchar_t wpath[1024];
     MultiByteToWideChar(CP_UTF8, 0, full_path, -1, wpath, 1024);
-
-    wchar_t wmethod[16];
     MultiByteToWideChar(CP_UTF8, 0, req->method, -1, wmethod, 16);
 
     // Open request
-    DWORD flags = API_USE_HTTPS ? WINHTTP_FLAG_SECURE : 0;
+    flags = API_USE_HTTPS ? WINHTTP_FLAG_SECURE : 0;
     hRequest = WinHttpOpenRequest(hConnect, wmethod, wpath,
                                   NULL, WINHTTP_NO_REFERER,
                                   WINHTTP_DEFAULT_ACCEPT_TYPES, flags);
@@ -158,19 +164,17 @@ static bool HTTP_Request(HttpRequest* req) {
     WinHttpAddRequestHeaders(hRequest, L"Accept: application/json", -1, WINHTTP_ADDREQ_FLAG_ADD);
 
     // Add client version header
-    wchar_t version_header[128];
     swprintf(version_header, 128, L"X-Client-Version: %hs", APP_VERSION);
     WinHttpAddRequestHeaders(hRequest, version_header, -1, WINHTTP_ADDREQ_FLAG_ADD);
 
     // Add authorization header if token provided
     if (req->token && strlen(req->token) > 0) {
-        wchar_t auth_header[1024];
         swprintf(auth_header, 1024, L"Authorization: Bearer %hs", req->token);
         WinHttpAddRequestHeaders(hRequest, auth_header, -1, WINHTTP_ADDREQ_FLAG_ADD);
     }
 
     // Send request
-    DWORD body_len = req->body ? (DWORD)strlen(req->body) : 0;
+    body_len = req->body ? (DWORD)strlen(req->body) : 0;
     if (!WinHttpSendRequest(hRequest, WINHTTP_NO_ADDITIONAL_HEADERS, 0,
                            (LPVOID)req->body, body_len, body_len, 0)) {
         goto cleanup;
@@ -190,10 +194,6 @@ static bool HTTP_Request(HttpRequest* req) {
     }
 
     // Read response
-    DWORD bytes_read = 0;
-    DWORD total_read = 0;
-    char buffer[4096];
-
     while (WinHttpReadData(hRequest, buffer, sizeof(buffer) - 1, &bytes_read) && bytes_read > 0) {
         buffer[bytes_read] = '\0';
         if (total_read + bytes_read < req->response_size) {

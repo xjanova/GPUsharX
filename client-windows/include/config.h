@@ -12,7 +12,9 @@
 #define APP_AUTHOR          "Xman Studio Thailand"
 
 // API Configuration - Local Development
-#define API_HOST            "127.0.0.1"
+// ใช้ localhost:8000 สำหรับ php artisan serve
+// หรือ gpu-sharing-platform.test สำหรับ Laragon vhost
+#define API_HOST            "localhost"
 #define API_PORT            8000
 #define API_BASE_PATH       "/api"
 #define API_USE_HTTPS       0       // 0 = HTTP, 1 = HTTPS

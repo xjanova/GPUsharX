@@ -26,3 +26,4 @@ Thumbs.db
 *.vsidx
 bin/
 obj/
+client-windows/GPUShareClient.vcxproj.user

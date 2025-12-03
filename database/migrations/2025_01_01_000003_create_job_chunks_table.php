@@ -25,10 +25,22 @@ return new class extends Migration
             $table->timestamp('assigned_at')->nullable();
             $table->timestamp('started_at')->nullable();
             $table->timestamp('completed_at')->nullable();
+
+            // Parallel processing & Low VRAM support
+            $table->string('chunk_type')->nullable(); // tile, step_range, hybrid
+            $table->json('chunk_config')->nullable(); // Position, dimensions, step range
+            $table->string('depends_on_chunk_id')->nullable(); // For sequential processing
+            $table->enum('dependency_status', ['none', 'waiting', 'ready'])->default('none');
+            $table->float('workload_weight')->default(1.0);
+            $table->string('partial_result_url')->nullable();
+            $table->unsignedInteger('required_vram_mb')->nullable(); // VRAM for THIS chunk
+
             $table->timestamps();
 
             $table->index(['render_job_id', 'status']);
             $table->index(['gpu_node_id', 'status']);
+            $table->index(['dependency_status', 'status']);
+            $table->index('required_vram_mb');
         });
     }
 

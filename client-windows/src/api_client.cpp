@@ -759,6 +759,105 @@ bool API_GetEarningsSummary(const char* token, EarningsSummary* summary) {
     return true;
 }
 
+// ============ Model Management API ============
+
+bool API_GetAvailableModels(const char* token, const char* node_id, int gpu_vram_mb,
+                            ModelData* models, int* model_count, int max_models) {
+    char response[16384] = {0};
+    char path[256];
+    int http_code = 0;
+
+    snprintf(path, sizeof(path), "/models/available?node_id=%s&vram_mb=%d", node_id, gpu_vram_mb);
+
+    HttpRequest req = {
+        .method = "GET",
+        .path = path,
+        .token = token,
+        .body = NULL,
+        .response = response,
+        .response_size = sizeof(response),
+        .http_code = &http_code
+    };
+
+    if (!HTTP_Request(&req)) return false;
+    if (!json_get_bool(response, "success")) return false;
+
+    const char* data = json_find_object(response, "data");
+    if (!data) return false;
+
+    const char* models_array = json_find_array(data, "models");
+    if (!models_array) return false;
+
+    *model_count = 0;
+    const char* model = models_array;
+
+    // Parse JSON array of models
+    while ((model = strchr(model, '{')) != NULL && *model_count < max_models) {
+        const char* model_end = strchr(model, '}');
+        if (!model_end) break;
+
+        // Extract model data
+        json_get_string(model, "model_id", models[*model_count].model_id, sizeof(models[*model_count].model_id));
+        json_get_string(model, "name", models[*model_count].name, sizeof(models[*model_count].name));
+        json_get_string(model, "category", models[*model_count].category, sizeof(models[*model_count].category));
+        models[*model_count].vram_required_mb = json_get_int(model, "vram_required_mb");
+        models[*model_count].size_mb = json_get_int(model, "size_mb");
+        models[*model_count].is_installed = json_get_bool(model, "is_installed");
+        models[*model_count].is_enabled = json_get_bool(model, "is_enabled");
+
+        (*model_count)++;
+        model = model_end + 1;
+    }
+
+    return true;
+}
+
+bool API_UpdateInstalledModels(const char* token, const char* node_id,
+                                const char* model_ids_json) {
+    char body[4096];
+    char response[1024] = {0};
+    int http_code = 0;
+
+    snprintf(body, sizeof(body),
+            "{\"node_id\":\"%s\",\"installed_models\":%s}",
+            node_id, model_ids_json);
+
+    HttpRequest req = {
+        .method = "POST",
+        .path = "/models/installed",
+        .token = token,
+        .body = body,
+        .response = response,
+        .response_size = sizeof(response),
+        .http_code = &http_code
+    };
+
+    return HTTP_Request(&req) && json_get_bool(response, "success");
+}
+
+bool API_UpdateModelStatus(const char* token, const char* node_id,
+                           const char* model_id, bool enabled) {
+    char body[512];
+    char response[1024] = {0};
+    int http_code = 0;
+
+    snprintf(body, sizeof(body),
+            "{\"node_id\":\"%s\",\"model_id\":\"%s\",\"enabled\":%s}",
+            node_id, model_id, enabled ? "true" : "false");
+
+    HttpRequest req = {
+        .method = "POST",
+        .path = "/models/status",
+        .token = token,
+        .body = body,
+        .response = response,
+        .response_size = sizeof(response),
+        .http_code = &http_code
+    };
+
+    return HTTP_Request(&req) && json_get_bool(response, "success");
+}
+
 // ============ Utility ============
 
 bool API_Ping(void) {

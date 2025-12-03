@@ -184,6 +184,7 @@ static ModelInfo g_models[MAX_MODELS] = {0};
 static int g_model_count = 0;
 static int g_model_scroll_offset = 0;
 static int g_model_hover = -1;
+static int g_node_vram_mb = 0;  // Node's GPU VRAM (set after GPU detection)
 
 // Particle system
 #define MAX_STARS 80
@@ -308,6 +309,12 @@ void App_Init(void) {
     Worker_Init(&g_worker);
     API_Init();
     GPU_GetAllInfo(&g_gpu_manager);
+
+    // Set node VRAM from first GPU (or selected GPU)
+    if (g_gpu_manager.gpu_count > 0) {
+        g_node_vram_mb = g_gpu_manager.gpus[0].memory_total;
+        LOG_INFO(LOG_CAT_GPU, "Node VRAM: %d MB", g_node_vram_mb);
+    }
 
     // Load saved credentials if remember is enabled
     if (g_app_settings->remember_password && Credentials_HasSaved()) {
@@ -2294,11 +2301,33 @@ void DrawModelsScreen(HDC hdc, RECT* rect) {
               "⚡ Toggle switches to select models for work",
               padding + 10, infoY, COLOR_TEXT_SECONDARY, g_font_small);
 
+    // VRAM Tier display
+    int vramY = infoY + 25;
+    char vramTierText[128];
+    const char* tierName = "Unknown";
+    COLORREF tierColor = COLOR_TEXT_MUTED;
+
+    if (g_node_vram_mb >= 24000) { tierName = "24GB+ (Premium)"; tierColor = RGB(255, 215, 0); }      // Gold
+    else if (g_node_vram_mb >= 12000) { tierName = "12GB (High)"; tierColor = RGB(168, 85, 247); }    // Purple
+    else if (g_node_vram_mb >= 8000) { tierName = "8GB (Standard)"; tierColor = RGB(59, 130, 246); }  // Blue
+    else if (g_node_vram_mb >= 6000) { tierName = "6GB (Basic)"; tierColor = RGB(34, 197, 94); }      // Green
+    else if (g_node_vram_mb >= 4000) { tierName = "4GB (Entry)"; tierColor = RGB(234, 179, 8); }      // Yellow
+    else if (g_node_vram_mb >= 3000) { tierName = "3GB (Minimum)"; tierColor = RGB(249, 115, 22); }   // Orange
+
+    snprintf(vramTierText, sizeof(vramTierText), GetLanguage() == LANG_TH ?
+             "🎮 VRAM ของคุณ: %dMB - Tier: %s" :
+             "🎮 Your VRAM: %dMB - Tier: %s", g_node_vram_mb, tierName);
+    DrawText_(hdc, vramTierText, padding + 10, vramY, tierColor, g_font_normal);
+
     // Stats bar
-    int statsY = infoY + 25;
+    int statsY = vramY + 25;
     int activeCount = 0;
     int installedCount = 0;
+    int compatibleCount = 0;
     for (int i = 0; i < g_model_count; i++) {
+        if (g_models[i].vram_required_mb <= g_node_vram_mb) {
+            compatibleCount++;
+        }
         if (g_models[i].is_installed) {
             installedCount++;
             if (g_models[i].is_enabled) activeCount++;
@@ -2307,8 +2336,9 @@ void DrawModelsScreen(HDC hdc, RECT* rect) {
 
     char statsText[128];
     snprintf(statsText, sizeof(statsText), GetLanguage() == LANG_TH ?
-             "🤖 ติดตั้ง: %d  |  ⚡ เปิดใช้งาน: %d" :
-             "🤖 Installed: %d  |  ⚡ Active: %d", installedCount, activeCount);
+             "🤖 รองรับ: %d/%d  |  ติดตั้ง: %d  |  ⚡ เปิดใช้งาน: %d" :
+             "🤖 Compatible: %d/%d  |  Installed: %d  |  ⚡ Active: %d",
+             compatibleCount, g_model_count, installedCount, activeCount);
     DrawText_(hdc, statsText, padding + 10, statsY, COLOR_NEON_GREEN, g_font_normal);
 
     // Model cards area
@@ -2328,30 +2358,51 @@ void DrawModelsScreen(HDC hdc, RECT* rect) {
         int cardY = cardsY + i * (cardH + cardSpacing);
         bool isHover = (g_model_hover == idx);
 
-        // Card background
-        COLORREF cardBorder = isHover ? COLOR_NEON_PURPLE : COLOR_PANEL_LIGHT;
-        Draw3DPanel(hdc, padding, cardY, cardW, cardH, false, isHover, cardBorder);
+        // Check if model is compatible with node's VRAM
+        bool isCompatible = (model->vram_required_mb <= g_node_vram_mb);
+
+        // Card background - gray out if not compatible
+        COLORREF cardBorder = COLOR_PANEL_LIGHT;
+        if (!isCompatible) {
+            cardBorder = RGB(75, 85, 99);  // Darker gray for incompatible
+        } else if (isHover) {
+            cardBorder = COLOR_NEON_PURPLE;
+        }
+        Draw3DPanel(hdc, padding, cardY, cardW, cardH, false, isHover && isCompatible, cardBorder);
 
         // Model icon
-        const char* icon = model->is_installed ? "🤖" : "📦";
-        DrawText_(hdc, icon, padding + 15, cardY + (cardH - 24) / 2, COLOR_TEXT_BRIGHT, g_font_large);
+        const char* icon = model->is_installed ? "🤖" : (isCompatible ? "📦" : "🚫");
+        COLORREF iconColor = isCompatible ? COLOR_TEXT_BRIGHT : RGB(107, 114, 128);
+        DrawText_(hdc, icon, padding + 15, cardY + (cardH - 24) / 2, iconColor, g_font_large);
 
-        // Model name
-        DrawText_(hdc, model->name, padding + 50, cardY + 12, COLOR_TEXT_BRIGHT, g_font_normal);
+        // Model name - gray out if not compatible
+        COLORREF nameColor = isCompatible ? COLOR_TEXT_BRIGHT : RGB(107, 114, 128);
+        DrawText_(hdc, model->name, padding + 50, cardY + 12, nameColor, g_font_normal);
 
-        // Model details
+        // Model details - highlight VRAM requirement if exceeds node's VRAM
         char details[128];
         float vramGB = model->vram_required_mb / 1024.0f;
         float sizeGB = model->size_mb / 1024.0f;
-        snprintf(details, sizeof(details), "💾 %.1fGB  |  🎮 VRAM: %.1fGB  |  📂 %s",
-                 sizeGB, vramGB, model->category);
-        DrawText_(hdc, details, padding + 50, cardY + 38, COLOR_TEXT_SECONDARY, g_font_small);
 
-        // Right side - Toggle or Download button
+        if (!isCompatible) {
+            snprintf(details, sizeof(details), "💾 %.1fGB  |  ⚠️ VRAM: %.1fGB (need %dMB more)  |  📂 %s",
+                     sizeGB, vramGB, model->vram_required_mb - g_node_vram_mb, model->category);
+            DrawText_(hdc, details, padding + 50, cardY + 38, RGB(239, 68, 68), g_font_small);  // Red warning
+        } else {
+            snprintf(details, sizeof(details), "💾 %.1fGB  |  🎮 VRAM: %.1fGB  |  📂 %s",
+                     sizeGB, vramGB, model->category);
+            DrawText_(hdc, details, padding + 50, cardY + 38, COLOR_TEXT_SECONDARY, g_font_small);
+        }
+
+        // Right side - Toggle, Download button, or "VRAM TOO LOW" label
         int toggleX = width - padding - 90;
         int toggleY = cardY + (cardH - 32) / 2;
 
-        if (model->is_installed) {
+        if (!isCompatible) {
+            // Show "VRAM ไม่พอ" / "LOW VRAM" label
+            DrawText_(hdc, GetLanguage() == LANG_TH ? "VRAM ไม่พอ" : "LOW VRAM",
+                      toggleX, toggleY + 8, RGB(239, 68, 68), g_font_small);
+        } else if (model->is_installed) {
             // Draw Sci-Fi Toggle Switch
             bool toggleHover = isHover;
             DrawSciFiToggle(hdc, toggleX, toggleY, 70, 32, model->is_enabled, toggleHover);

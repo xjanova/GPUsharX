@@ -116,6 +116,54 @@ class AdminReferralController extends Controller
         return view('admin.user-referrals', compact('users'));
     }
 
+    public function referralTreeView(): View
+    {
+        // Get all users with referrals for the tree visualization
+        $users = User::select('id', 'name', 'email', 'referral_code', 'referred_by', 'credits', 'created_at')
+            ->withCount('directReferrals')
+            ->get();
+
+        // Build graph data for visualization
+        $nodes = $users->map(function ($user) {
+            return [
+                'id' => $user->id,
+                'name' => $user->name,
+                'email' => $user->email,
+                'referral_code' => $user->referral_code,
+                'referrals' => $user->direct_referrals_count,
+                'credits' => $user->credits,
+                'level' => $user->referred_by ? 1 : 0,
+            ];
+        });
+
+        $edges = $users->filter(function ($user) {
+            return $user->referred_by !== null;
+        })->map(function ($user) {
+            return [
+                'from' => $user->referred_by,
+                'to' => $user->id,
+            ];
+        })->values();
+
+        // Stats
+        $stats = [
+            'total_users' => User::count(),
+            'users_with_referrer' => User::whereNotNull('referred_by')->count(),
+            'users_with_referrals' => User::has('directReferrals')->count(),
+            'total_commission_paid' => ReferralEarning::where('status', 'paid')->sum('commission_amount') ?: 0,
+            'pending_commission' => ReferralEarning::where('status', 'pending')->sum('commission_amount') ?: 0,
+        ];
+
+        // Top referrers
+        $topReferrers = User::withCount('directReferrals')
+            ->having('direct_referrals_count', '>', 0)
+            ->orderByDesc('direct_referrals_count')
+            ->limit(10)
+            ->get();
+
+        return view('admin.referral-tree-view', compact('nodes', 'edges', 'stats', 'topReferrers'));
+    }
+
     public function referralTree(User $user): View
     {
         $tree = ReferralTree::where('referrer_id', $user->id)
